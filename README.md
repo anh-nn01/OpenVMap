@@ -30,6 +30,9 @@ project-root/
         └── BEV_semantic/
             └── {scene_token}_{timestamp}.glb
 ├── src
+    ├── examples
+        ├── nusc
+        └── av2
     ├── processors
         ├── generate_3Dpc.py
         ├── generate_semantics.py
