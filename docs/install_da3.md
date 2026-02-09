@@ -26,6 +26,9 @@ export HOME=/fs/nexus-projects/open_vectormap/ # replace your project directory 
 source $HOME/miniconda3/bin/activate
 conda activate da3
 cd ~/Depth-Anything-3
+
+module load cuda/12.4.1
+module load gcc/14.2.0
 ```
 #### Simple usage
 ```python
