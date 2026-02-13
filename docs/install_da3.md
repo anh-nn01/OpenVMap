@@ -25,7 +25,6 @@ Read more about the model [Here](https://huggingface.co/depth-anything/DA3NESTED
 export HOME=/fs/nexus-projects/open_vectormap/ # replace your project directory here
 source $HOME/miniconda3/bin/activate
 conda activate da3
-cd ~/Depth-Anything-3
 
 module load cuda/12.4.1
 module load gcc/14.2.0
@@ -33,6 +32,8 @@ module load gcc/14.2.0
 #### Simple usage
 ```python
 import torch
+import sys
+sys.path.append("<PATH_TO_DA3_FOLDER>")
 from depth_anything_3.api import DepthAnything3
 
 # Load model from Hugging Face Hub
@@ -42,7 +43,7 @@ model = model.to(device=device)
 
 # Run inference on images
 # images = ["image1.jpg", "image2.jpg"]  # List of image paths, PIL Images, or numpy arrays
-# path to your test image here
+# specify path to your test image here
 images = [
     "/fs/gamma-datasets/nuscenes/samples/CAM_FRONT/n015-2018-11-21-19-38-26+0800__CAM_FRONT__1542800955912460.jpg",
 ]
