@@ -31,11 +31,13 @@ Then, request access to SAM3 on HuggingFace [here](https://github.com/facebookre
 export HOME=/fs/nexus-projects/open_vectormap/ # replace your project directory here
 source $HOME/miniconda3/bin/activate
 conda activate sam3
-cd ~/sam3
 ```
 
 #### Simple Usage
 ```python
+import sys
+sys.path.append('<PATH_TO_YOUR_SAM3_FOLDER>')
+
 import torch
 #################################### For Image ####################################
 from PIL import Image
