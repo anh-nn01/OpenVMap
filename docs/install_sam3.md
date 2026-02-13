@@ -14,6 +14,13 @@ cd sam3
 pip install -e .
 pip install -e ".[notebooks]"
 pip install -e ".[train,dev]"
+
+########################################################################
+# NOTE: when executing SAM3 example, the model weight is downloaded at: 
+# $HOME/.cache/huggingface/hub/models--facebook--sam3/snapshots/3c879f39826c281e95690f02c7821c4de09afae7/sam3.pt
+########################################################################
+# update your SAM3 weight here
+export SAM3_WEIGHT=$HOME/.cache/huggingface/hub/models--facebook--sam3/snapshots/3c879f39826c281e95690f02c7821c4de09afae7/sam3.pt
 ```
 
 Then, request access to SAM3 on HuggingFace [here](https://github.com/facebookresearch/sam3#:~:text=access%20to%20the%20checkpoints%20on%20the%20SAM%203%20Hugging%20Face%20repo.).
@@ -38,7 +45,6 @@ from sam3.model.sam3_image_processor import Sam3Processor
 model = build_sam3_image_model()
 processor = Sam3Processor(model)
 # Load an image
-#   Sample: "/fs/gamma-datasets/nuscenes/samples/CAM_FRONT/n015-2018-11-21-19-38-26+0800__CAM_FRONT__1542800955912460.jpg"
 image = Image.open("<YOUR_IMAGE_PATH.jpg>")
 inference_state = processor.set_image(image)
 # Prompt the model with text

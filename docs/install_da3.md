@@ -15,16 +15,6 @@ pip install -e . # Basic
 pip install --no-build-isolation git+https://github.com/nerfstudio-project/gsplat.git@0b4dddf04cb687367602c01196913cde6a743d70 # for gaussian head
 pip install -e ".[app]" # Gradio, python>=3.10
 pip install -e ".[all]" # ALL
-
-########################################################################
-# NOTE: when executing SAM3 example, the model weight is downloaded at: 
-# $HOME/.cache/huggingface/hub/models--facebook--sam3/snapshots/3c879f39826c281e95690f02c7821c4de09afae7/sam3.pt
-########################################################################
-# update your SAM3 weight here
-export SAM3_WEIGHT=$HOME/.cache/huggingface/hub/models--facebook--sam3/snapshots/3c879f39826c281e95690f02c7821c4de09afae7/sam3.pt
-
-# install utralytics for efficient SAM3 predictor
-pip install -U ultralytics==8.3.237
 ```
 
 Read more about the model [Here](https://huggingface.co/depth-anything/DA3NESTED-GIANT-LARGE-1.1).
