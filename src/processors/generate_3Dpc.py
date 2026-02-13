@@ -39,6 +39,9 @@ def generate_3Dpc(images, export_dir):
     # print(prediction.intrinsics.shape)   # Camera intrinsics: [N, 3, 3] float32
 
 
+""" This is for testing on a single image only
+    To process on the whole folder, import the above functions
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate 3D point cloud from monocular image")
     parser.add_argument("--img_path", type=str, required=True, help="Path to input image")
