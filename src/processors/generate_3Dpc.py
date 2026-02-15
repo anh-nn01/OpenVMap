@@ -54,5 +54,6 @@ if __name__ == "__main__":
     parser.add_argument("--export_dir", type=str, required=True, help="Directory to save output 3D point cloud")
     args = parser.parse_args()
 
+    # generate 3D point cloud and save to export_dir
     generator = PointCloud3DGenerator()
     generator.generate_3Dpc([args.img_path], args.export_dir)
