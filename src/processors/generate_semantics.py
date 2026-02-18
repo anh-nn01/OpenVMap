@@ -8,14 +8,18 @@ import sys
 import os
 import argparse
 pwd = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(f"{pwd}/../../sam3/")
 
 import torch
 import numpy as np
-
 from PIL import Image
+
+sys.path.append(f"{pwd}/../../sam3/")
 from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
+
+sys.path.append(f"{pwd}/../configs")
+from bev import SEMANTIC_CLASSES
+
 
 class Semantic2DGenerator:
 	def __init__(self, threshold=0.15):
@@ -26,14 +30,7 @@ class Semantic2DGenerator:
 		self.processor = Sam3Processor(self.model)
 		self.threshold = threshold
 		# Semantic classes
-		self.semantic_classes = [
-			# fundamental road elements
-			"drivable road area", "lane divider", "lane marking", "crosswalk area",
-			# union these elements to form a single class
-			"curb", 
-			# dynamic objects / obstacles
-			"vehicle",
-		]
+		self.semantic_classes = SEMANTIC_CLASSES
 
 	def generate_2Dsem(self, image_path, export_dir):
 		image = Image.open(image_path)
