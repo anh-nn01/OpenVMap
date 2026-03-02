@@ -12,6 +12,8 @@ sys.path.append(f"{pwd}/../../Depth-Anything-3/")
 
 import torch
 from depth_anything_3.api import DepthAnything3
+import numpy as np
+from PIL import Image
 
 class PointCloud3DGenerator:
     def __init__(self):
@@ -28,30 +30,63 @@ class PointCloud3DGenerator:
             (for multiview; for monocular, use list of [single_image_path])
         """
         # Run inference on images and save to export_dir
+        #   => export_dir=None, not saving any 3D point cloud results
+        #   => save only the (1) intrinsics and (2) depth map instead
         prediction = self.model.inference(
             images,
-            export_dir=export_dir,
+            export_dir=export_dir, # export_dir: not saving any final PC results.
             export_format="glb",  # Options: glb, npz, ply, mini_npz, gs_ply, gs_video,
             show_cameras=False,
+            # process_res=max(sample_img.size),
         )
 
-        # remove unnecessary files generated during inference
-        os.remove(os.path.join(export_dir, "scene.jpg"))
+        # # remove unnecessary files generated during inference
+        # if export_dir is not None:
+        #     os.remove(os.path.join(export_dir, "scene.jpg"))
+
+        ###################################
+        ### [DEVELOPER] Extract info    ###
+        ###################################
+        # image = np.asarray(Image.open(images[0]))
+        depth = prediction.depth[0]  # single first frame
+        K = prediction.intrinsics[0] # single first frame
+        # print('Image shape      :', image.shape)
+        # print('Depth shape      :', depth.shape)
+        # print('Intrinsics shape :', K.shape)
+        
+        # save depth and intrinsics
+        os.makedirs(export_dir, exist_ok=True)
+        np.save(os.path.join(export_dir, 'depth.npy'), depth)
+        np.save(os.path.join(export_dir, 'intrinsics.npy'), K)
 
         # # Access results
-        # print(prediction.depth.shape)        # Depth maps: [N, H, W] float32
+        # print('Depth shape:', prediction.depth.shape)        # Depth maps: [N, H, W] float32
         # print(prediction.conf.shape)         # Confidence maps: [N, H, W] float32
-        # print(prediction.extrinsics.shape)   # Camera poses (w2c): [N, 3, 4] float32
-        # print(prediction.intrinsics.shape)   # Camera intrinsics: [N, 3, 3] float32
+        # print('Extrinsics :', prediction.extrinsics.shape)   # Camera poses (w2c): [N, 3, 4] float32
+        # print('Intrinsics :', prediction.intrinsics.shape)   # Camera intrinsics: [N, 3, 3] float32
+
+        # P = prediction.extrinsics
+        # K = prediction.intrinsics[0]
+        # D = prediction.depth[0]
+        # s = prediction.scale_factor
+        # print(P.round(5))
+        # print(K.round(5))
+        # print(s)
+        # print(np.linalg.inv(K))
 
 
 """ This is for testing on a single image only
     To process on the whole folder, import the above functions
+
+    Example:
+    python generate_3Dpc.py \
+    --img_path=../examples/nusc/eg_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg \
+    --export_dir=../examples/nusc/eg_4/da3_output/
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate 3D point cloud from monocular image")
     parser.add_argument("--img_path", type=str, required=True, help="Path to input image")
-    parser.add_argument("--export_dir", type=str, required=True, help="Directory to save output 3D point cloud")
+    parser.add_argument("--export_dir", type=str, default=None, help="Directory to save output 3D point cloud")
     args = parser.parse_args()
 
     # generate 3D point cloud and save to export_dir
