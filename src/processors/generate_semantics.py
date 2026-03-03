@@ -18,7 +18,7 @@ from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
 
 sys.path.append(f"{pwd}/../configs")
-from bev import SEMANTIC_CLASSES
+from cfg_bev import SEMANTIC_CLASSES
 
 
 class Semantic2DGenerator:
