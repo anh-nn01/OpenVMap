@@ -6,6 +6,9 @@
 ##################################################################
 
 # [NOTE] use conda venv for DA3 for this script
+# [NOTE] adjust 3D coordinates by avg ground height (drivable lane index = 1)
+#        => avg Y of (all points associated with (1) drivable lane and (2) <= 5 meters of depth)
+#        => more generalizable to different sensor setups
 
 import os
 import sys
@@ -20,7 +23,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 sys.path.append(f"{pwd}/../configs")
-from bev import SEMANTIC_CLASSES
+import cfg_bev
 
 def load_semantic_masks(path):
     data = np.load(path, allow_pickle=True)
@@ -95,6 +98,7 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     # ============================================================
     mask_dict = load_semantic_masks(path_masks)
     num_classes = len(mask_dict)
+    assert len(mask_dict) == len(cfg_bev.SEMANTIC_CLASSES)
     first_key = next(iter(mask_dict))
     H_m, W_m = mask_dict[first_key].shape[1:]
     print('Mask spatial shape :', H_m, W_m)
@@ -168,27 +172,62 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     semantics = sem_grid.reshape(-1,1) # semantic class in (HxW, 1)
     # filter points based on point cloud range
     valid_indexes = extract_points(points, xlim, ylim, zlim)
-    # ============================================================
-    # (2e) Compute average ground height in camera pose
-    # ============================================================
-    # filter ground points
-    points_ground = points[semantics[:,0] == 1] # drivable lanes
-    print('Avg ground height in cam frame:', points_ground[:,1].mean().round(2), '[m]')
-
     # **************************************
-    # Visualization
+    # Visualization: must be here
     # **************************************
     visualize_outputs(
         img, D, 
         sem_grid, num_classes,
         points, valid_indexes
     )
+    # filter points
+    points = points[valid_indexes]
+    semantics = semantics[valid_indexes]
+
+
+
+
+    # ============================================================
+    # (3a) Compute average ground height in camera pose
+    #       => define ylim
+    # ============================================================
+    # filter ground points
+    points_ground = points[semantics[:,0] == 1] # drivable lanes
+    # points_ground = points_ground[points_ground[:,2] <= 10] # within 5 meter depth
+    avg_ground_height = points_ground[:,1].mean() # average ground height
+    print('\nAvg ground height in cam frame:', avg_ground_height.round(2), '[m]')
+    # Construct height limit
+    if not ylim:
+        ylim = (avg_ground_height-1, avg_ground_height + cfg_bev.BEV_HEIGHT)
+    # ============================================================
+    # (3b) Construct semantic BEV semantic voxels from 3D pc
+    # ============================================================
+    # bev_voxels = construct_bev_voxels(points, semantics, grid_size=cfg_bev.voxel_size)
+
+def construct_bev_voxels(
+        points, semantics, grid_size, xlim=None, ylim=None, zlim=None
+    ):
+    """
+        Construct BEV grid voxels from semantic point cloud
+
+            points: 3D point cloud sets
+            semantics: associated semantic class sets
+            grid_size: voxel size in metric [m]
+            xlim: point cloud range in metric [m]
+            ylim: point cloud range in metric [m]
+            zlim: point cloud range in metric [m]
+            
+        Output: bev voxels filled with semantic class indexes
+                default: -1 = no point matched (e.g. occlusion)
+    """
+    bev_grid = None
+    pass
 
     
 def visualize_outputs(
         img, depth, 
         sem_grid, num_classes,
-        points, point_indexes
+        points, valid_indexes
     ):
     """ 
         Visualization:
@@ -197,7 +236,7 @@ def visualize_outputs(
             depth: estimated metric depth (H,W,1)
             sem_grid: multi-class semantic mask (H,W,1)
             points: unprojected 3D points (HxW,3)
-            point_indexes: extracted points of interest 
+            valid_indexes: extracted points of interest 
     """
     colors = img.reshape(-1, 3) # Point colors from RGB image
     semantics = sem_grid.reshape(-1,1) # Point semantic classes
@@ -211,10 +250,10 @@ def visualize_outputs(
     sem_visualization = sem_colors.reshape((H_d, W_d, 3))
     
     # filter points of interest
-    points = points[point_indexes]
-    colors = colors[point_indexes]
-    semantics = semantics[point_indexes]
-    sem_colors = sem_colors[point_indexes]
+    points = points[valid_indexes]
+    colors = colors[valid_indexes]
+    semantics = semantics[valid_indexes]
+    sem_colors = sem_colors[valid_indexes]
     # print(points.shape)
     # print(semantics.shape)
 
