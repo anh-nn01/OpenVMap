@@ -6,6 +6,9 @@
 .nv/
 .bash_history
 tmp/
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
 
 # ignore env
 miniconda3/
