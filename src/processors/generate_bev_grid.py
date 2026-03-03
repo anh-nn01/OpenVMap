@@ -158,29 +158,16 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     # Stack all mask across classes: (N_class, H_d, W_d)
     masks = np.stack([mask_dict[semantic_class] for semantic_class in mask_dict], axis=0)
     # (N_class, H_d, W_d) -> (1, H_d, W_d)
-    sem_grids = np.argmax(masks[::-1], axis=0) # class tie break: use the class at the higher index
-    sem_grids = masks.max(0).astype(np.uint8) * (sem_grids + 1) # semantic index starts at 1; 0 = unmatched class
+    sem_grid = np.argmax(masks[::-1], axis=0) # class tie break: use the class at the higher index
+    sem_grid = masks.max(0).astype(np.uint8) * (sem_grid + 1) # semantic index starts at 1; 0 = unmatched class
     # print(sem_grids.shape)
     # ============================================================
     # (2d) Filter out 3D points based on point cloud range
     # ============================================================
-    points = pc_grid.reshape(-1,3)
-    colors = img.reshape(-1, 3)
-    semantics = sem_grids.reshape(-1,1)
-    # semantic colors for visualization
-    cmap = plt.get_cmap('tab20', num_classes+1)
-    palette = (cmap(np.arange(num_classes + 1))[:, :3] * 255).astype(np.uint8)
-    palette[0] = np.array([128, 128, 128], dtype=np.uint8) # index 0 = gray: unmatched class
-    sem_colors = palette[semantics].reshape(-1,3)  # (N, 3)
-    semantic_grid = sem_colors.reshape((H_d, W_d, 3))
+    points = pc_grid.reshape(-1,3) # points in (HxW, 3)
+    semantics = sem_grid.reshape(-1,1) # semantic class in (HxW, 1)
     # filter points based on point cloud range
     valid_indexes = extract_points(points, xlim, ylim, zlim)
-    points = points[valid_indexes]
-    colors = colors[valid_indexes]
-    semantics = semantics[valid_indexes]
-    sem_colors = sem_colors[valid_indexes]
-    # print(points.shape)
-    print(semantics.shape)
     # ============================================================
     # (2e) Compute average ground height in camera pose
     # ============================================================
@@ -188,26 +175,65 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     points_ground = points[semantics[:,0] == 1] # drivable lanes
     print('Avg ground height in cam frame:', points_ground[:,1].mean().round(2), '[m]')
 
-    
+    # **************************************
+    # Visualization
+    # **************************************
+    visualize_outputs(
+        img, D, 
+        sem_grid, num_classes,
+        points, valid_indexes
+    )
 
     
+def visualize_outputs(
+        img, depth, 
+        sem_grid, num_classes,
+        points, point_indexes
+    ):
+    """ 
+        Visualization:
+        
+            img: input image (H,W,3)
+            depth: estimated metric depth (H,W,1)
+            sem_grid: multi-class semantic mask (H,W,1)
+            points: unprojected 3D points (HxW,3)
+            point_indexes: extracted points of interest 
+    """
+    colors = img.reshape(-1, 3) # Point colors from RGB image
+    semantics = sem_grid.reshape(-1,1) # Point semantic classes
     
+    # semantic colors for visualization
+    cmap = plt.get_cmap('tab20', num_classes+1)
+    palette = (cmap(np.arange(num_classes + 1))[:, :3] * 255).astype(np.uint8)
+    palette[0] = np.array([128, 128, 128], dtype=np.uint8) # index 0 = gray: unmatched class
+    sem_colors = palette[semantics].reshape(-1,3)  # (N, 3)
+    H_d, W_d = depth.shape[:2]
+    sem_visualization = sem_colors.reshape((H_d, W_d, 3))
+    
+    # filter points of interest
+    points = points[point_indexes]
+    colors = colors[point_indexes]
+    semantics = semantics[point_indexes]
+    sem_colors = sem_colors[point_indexes]
+    # print(points.shape)
+    # print(semantics.shape)
+
     # **************************************
     # Visualize input image
     # **************************************
     vis = plt.imshow(img)
-    plt.savefig('debug_outputs/example_obs.png', bbox_inches='tight')
+    plt.savefig('debug_outputs/1_example_obs.png', bbox_inches='tight')
     # **************************************
     # Visualize depth map
     # **************************************
-    vis = plt.imshow(D, cmap='Spectral', vmin=5, vmax=50)
+    vis = plt.imshow(depth, cmap='Spectral', vmin=5, vmax=50)
     plt.colorbar(vis, label='Depth [meters]', orientation='horizontal',)
-    plt.savefig('debug_outputs/example_depth.png', bbox_inches='tight')
+    plt.savefig('debug_outputs/2_example_depth.png', bbox_inches='tight')
     # **************************************
     # Visualize semantic map
     # **************************************
-    vis = plt.imshow(semantic_grid)
-    plt.savefig('debug_outputs/example_semantic.png', bbox_inches='tight')
+    vis = plt.imshow(sem_visualization)
+    plt.savefig('debug_outputs/3_example_semantic.png', bbox_inches='tight')
     # **************************************
     # visualize unprojected 3D point clouds
     # **************************************
@@ -218,11 +244,11 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     print('\tZ range [m] (forward):', points[:,2].min().round(2), points[:,2].max().round(2))
     # point cloud
     pc = trimesh.points.PointCloud(vertices=points)
-    pc.export('debug_outputs/example_pc.glb')
+    pc.export('debug_outputs/4_example_pc.glb')
     pc = trimesh.points.PointCloud(vertices=points, colors=colors)
-    pc.export('debug_outputs/example_pc_colored.glb')
+    pc.export('debug_outputs/5_example_pc_colored.glb')
     pc = trimesh.points.PointCloud(vertices=points, colors=sem_colors)
-    pc.export('debug_outputs/example_pc_semantic.glb')
+    pc.export('debug_outputs/6_example_pc_semantic.glb')
 
 
 debug_func(zlim=(0,35))
