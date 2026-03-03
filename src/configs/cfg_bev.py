@@ -6,3 +6,11 @@ SEMANTIC_CLASSES = [
 	# dynamic objects / obstacles
 	"vehicle",
 ]
+
+
+###################################
+# map BEV voxels
+###################################
+BEV_HEIGHT = 1.5 # height of interest above the ground level, in meters
+voxel_size = 0.5 # voxel size, in meter
+
