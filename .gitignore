@@ -1,0 +1,15 @@
+# Ignore all cache and temp files
+.anaconda/
+.cache/
+.conda/
+.ipython/
+.nv/
+.bash_history
+tmp/
+
+# ignore env
+miniconda3/
+
+# ignore install mmcv
+mmcv/
+mmdetection/
