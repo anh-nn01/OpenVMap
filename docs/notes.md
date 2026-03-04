@@ -1,5 +1,49 @@
-## Some research notes on pipeline designs
+## TODO
+### A. Data 
+1. Generate nuscenes folder by scenes
+    ```
+    nusc/
+        + scene_xxxxx/
+            + frontview/
+                00.jpg
+                01.jpg
+                ...
+            + poses/
+                00.txt
+                01.txt
+                ...
+            + 2d_semantic/
+                00.npy
+                01.npy
+                ...
+            + depth/
+                00.npy
+                01.npy
+                ...
+            + intrinsics
+                intrinsics.npy
+            + 3D_semantic/
+                00.glb
+                01.glb
+                ...
+            + global_
+    av2/
+        ...
+    ```
 
+### B. Model 
+1. Complete pipeline: 2D image to 3D semantic point cloud
+2. Complete pipeline: 2D video to global 3D semantic point cloud
+3. Modify vector map decoder
+
+### Experiments
+1. Compare GlobalMapNet:
+    * front-view only
+    * cite GAP and AP metrics
+2. Demonstrate generalizability: train on `nusc` but generalize on any dataset
+3. In-the-wild videos
+
+## Some research notes on pipeline designs
 ### A. Local 3D PC and Voxelization
 1. Define `ylim` (height range of 3D point cloud of interest) by `avg ground height` using drivable lane (semantic index = 1) <br>
     e.g. avg Y-coords of all points associated with 
@@ -48,5 +92,6 @@ Proceed to voxelize local map using **first-frame alignment**:
 
 3. **Vector map mapping**
     * Train map decoder using BEV voxel fusion
+    
 
 
