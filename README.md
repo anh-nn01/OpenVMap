@@ -3,6 +3,8 @@
 * **TODO 2:** Understand train/val [split code](https://github.com/hustvl/MapTR/blob/maptrv2/tools/create_data.py) from MapTRv2
 * **TODO 3:** Implement + run processor for procducing PC & semantics by splits 
 
+## [Important notes](docs/notes.md)
+
 ## Getting started
 1. [GPU interactive session](docs/interactive_bash.md) 
 2. [Miniconda3 installation](docs/miniconda3.md) (install ONCE)
@@ -16,6 +18,7 @@
 <pre>
 project-root/
 ├── README.md
+├── docs/
 ├── miniconda3/
 ├── Depth-Anything-3/
 ├── sam3/
@@ -29,14 +32,14 @@ project-root/
             └── {scene_token}_{timestamp}.glb
         └── BEV_semantic/
             └── {scene_token}_{timestamp}.glb
-├── src
-    ├── examples
-        ├── nusc
-        └── av2
-    ├── processors
+├── src/
+    ├── examples/
+        ├── nusc/
+        └── av2/
+    ├── processors/
         ├── generate_3Dpc.py
         ├── generate_semantics.py
-        └── generate_bev.py
+        └── generate_bev_grid.py
     ├── models
         ├── map_decoder
         ├── alignment_modules
