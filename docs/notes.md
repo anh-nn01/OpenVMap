@@ -3,30 +3,34 @@
 1. Generate nuscenes folder by scenes
     ```
     nusc/
-        + scene_xxxxx/
-            + frontview/
-                00.jpg
-                01.jpg
-                ...
-            + poses/
-                00.txt
-                01.txt
-                ...
-            + 2d_semantic/
-                00.npy
-                01.npy
-                ...
-            + depth/
-                00.npy
-                01.npy
-                ...
-            + intrinsics
-                intrinsics.npy
-            + 3D_semantic/
-                00.glb
-                01.glb
-                ...
-            + global_3D_semantic.npy
+        + train/
+            + scene_xxxx/
+                + frontview/
+                    00.jpg
+                    01.jpg
+                    ...
+                + poses/
+                    00.txt
+                    01.txt
+                    ...
+                + 2d_semantic/
+                    00.npy
+                    01.npy
+                    ...
+                + depth/
+                    00.npy
+                    01.npy
+                    ...
+                + intrinsics
+                    intrinsics.npy
+                + 3D_semantic/
+                    00.glb
+                    01.glb
+                    ...
+                + global_3D_semantic.npy
+        + val/
+            + scene_xxxx/
+            ...
     av2/
         ...
     ```
