@@ -11,9 +11,9 @@ SEMANTIC_CLASSES = [
 ###################################
 # map BEV voxels
 ###################################
-BEV_HEIGHT = 1.5 # height of interest above the ground level, in meters
-voxel_size = 0.5 # voxel size, in meter
+BEV_HEIGHT = 2 # height of interest above the ground level, in meters
+voxel_size = 0.3 # voxel size, in meter
 xlim = (-15,15) # lateral
 ylim = None # dynamically adjusted based on avg ground level / cam height
-zlim = (0, 30)  # depth
+zlim = (0,30)  # depth
 

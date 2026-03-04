@@ -6,9 +6,16 @@
 ##################################################################
 
 # [NOTE] use conda venv for DA3 for this script
+
+""" Some notes on the designs of local processing"""
 # [NOTE] adjust 3D coordinates by avg ground height (drivable lane index = 1)
 #        => avg Y of (all points associated with (1) drivable lane and (2) in point cloud of interest)
 #        => more generalizable to different sensor setups
+# [NOTE] points: filter out noisy 3D points
+# [NOTE] bev_voxel: max pool along Y (height) first, then along XZ
+# [NOTE] bev_voxel: post-processing: use ZX kernel size = (5)
+
+
 
 import os
 import sys
@@ -22,6 +29,7 @@ import cv2
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from PIL import Image
+import open3d as o3d
 
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
@@ -70,14 +78,40 @@ def extract_points(points, xlim=None, ylim=None, zlim=None):
         valid = valid & (points[:,2] >= zmin) & (points[:,2] <= zmax)
     return valid
 
+    
+def statistical_filter_3Dnoises(points, nb_neighbors=20, std_ratio=2.0):
+    # Convert numpy to Open3D PointCloud
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    # cl: filtered pcd, ind: list of inlier indices
+    cl, ind = pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, 
+                                             std_ratio=std_ratio)
+    # Create boolean mask (default False)
+    mask = np.zeros(len(points), dtype=bool)
+    mask[ind] = True
+    return mask
+
+def get_radius_filter_mask(points, nb_points=8, radius=0.5):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    # cl: filtered pcd, ind: list of inlier indices
+    cl, ind = pcd.remove_radius_outlier(nb_points=nb_points, 
+                                        radius=radius)
+    mask = np.zeros(len(points), dtype=bool)
+    mask[ind] = True
+    return mask
+
 
 def debug_func(xlim=None, ylim=None, zlim=None):
     #############################
     # Debugging
     #############################
-    eg_id = 3
+    eg_id = 5
+    # path_img = '../examples/nusc/eg_2/n008-2018-05-21-11-06-59-0400__CAM_FRONT__1526915292912465.jpg'
     # path_img = '../examples/nusc/eg_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg'
-    path_img = '../examples/nusc/eg_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
+    # path_img = '../examples/nusc/eg_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
+    path_img = '../examples/nusc/eg_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
+    # path_img = '../examples/nusc/eg_6/val_front_275.jpg'
     path_masks = f'{pwd}/../examples/nusc/eg_{eg_id}/semantic_masks.npz'
     path_intrinsic =  f'{pwd}/../examples/nusc/eg_{eg_id}/da3_output/intrinsics.npy'
     path_depth =  f'{pwd}/../examples/nusc/eg_{eg_id}/da3_output/depth.npy' 
@@ -198,21 +232,29 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     if not ylim:
         ylim = (avg_ground_height-1, avg_ground_height + cfg_bev.BEV_HEIGHT)
     # ============================================================
-    # (2d) Filter out 3D points based on point cloud range
+    # (3b) Filter out 3D points based on point cloud range
     # ============================================================
     # filter points based on point cloud range
     valid_indexes = extract_points(points, xlim, ylim, zlim)
+    # ============================================================
+    # (3c) Filter out noisy 3D points
+    # ============================================================
+    # filter_noise_indexes = statistical_filter_3Dnoises(points)
+    filter_noise_indexes = get_radius_filter_mask(points)
+    valid_indexes = valid_indexes & filter_noise_indexes
     # filter points
     points = points[valid_indexes]
     semantics = semantics[valid_indexes]
     
     
     # ============================================================
-    # (3b) Construct semantic BEV semantic voxels from 3D pc
+    # (3c) Construct semantic BEV semantic voxels from 3D pc
     # ============================================================
     bev_voxels = construct_bev_voxels(
-        points, semantics, grid_size=cfg_bev.voxel_size,
+        points, semantics, voxel_size=cfg_bev.voxel_size,
+        xlim=xlim, zlim=zlim,
     )
+    print(bev_voxels.shape)
 
 
 
@@ -222,34 +264,70 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     # **************************************
     visualize_outputs(
         img, D, 
-        pc_grid, sem_grid, 
+        pc_grid, sem_grid, bev_voxels,
         num_classes, valid_indexes
     )
 
 def construct_bev_voxels(
-        points, semantics, grid_size,
+        points, semantics, voxel_size,
+        xlim, zlim,
     ):
     """
         Construct BEV grid voxels from semantic point cloud
 
             points: 3D point cloud sets (N_,3)
             semantics: associated semantic class sets (N_,1)
-            grid_size: voxel size in metric [m]
+            voxel_size: voxel size in metric [m]
+            xlim: lateral limit [m]
+            zlim: longitudinal (forward) limit [m]
             
         Output: bev voxels filled with semantic class indexes
                 default: -1 = no point matched (e.g. occlusion)
+                
     """
-    # # Extract BEV in metric space
-    # valid_indices = True
-    # valid_indices = valid_indices & (points >)
+    # 1. Filter points within bounds
+    mask = (points[:, 0] >= xlim[0]) & (points[:, 0] < xlim[1]) & \
+           (points[:, 2] >= zlim[0]) & (points[:, 2] < zlim[1])
+    pts = points[mask].copy()
+    labels = semantics[mask].flatten()
 
-    # bev_grid = None
-    pass
+    if len(pts) == 0:
+        width = int(np.ceil((xlim[1] - xlim[0]) / voxel_size))
+        depth = int(np.ceil((zlim[1] - zlim[0]) / voxel_size))
+        return np.full((width, depth), -1, dtype=np.int32)
+
+    # 2. Map to discrete grid indices
+    # We calculate indices FIRST before inversion to avoid math errors
+    x_indices = ((pts[:, 0] - xlim[0]) / voxel_size).astype(np.int32)
+    z_indices = ((pts[:, 2] - zlim[0]) / voxel_size).astype(np.int32)
+
+    # 3. Calculate Dimensions
+    width = int(np.ceil((xlim[1] - xlim[0]) / voxel_size))
+    depth = int(np.ceil((zlim[1] - zlim[0]) / voxel_size))
+
+    # 4. Max Pooling along Height (Axis=1)
+    # lexsort sorts by x, then z, then labels (labels is the primary sort key)
+    # This places the HIGHEST label at the end of each (x, z) group
+    sort_idx = np.lexsort((labels, z_indices, x_indices))
+    x_s, z_s, l_s = x_indices[sort_idx], z_indices[sort_idx], labels[sort_idx]
+    # Use unique on combined (x, z) to find the LAST occurrence (the max label)
+    combined_idx = x_s.astype(np.int64) * depth + z_s
+    _, first_unique_reversed = np.unique(combined_idx[::-1], return_index=True)
+    unique_indices = (len(combined_idx) - 1) - first_unique_reversed
+
+    # 5. Fill Grid
+    bev_grid = np.full((width, depth), -1, dtype=np.int32)
+    bev_grid[x_s[unique_indices], z_s[unique_indices]] = l_s[unique_indices]
+    # 6. Apply Lateral Inversion 
+    #   (original 3D PC: x-axis points to the left => invert to the right)
+    bev_grid = np.flip(bev_grid, axis=0)
+    return bev_grid
+
 
     
 def visualize_outputs(
         img, depth, 
-        pc_grid, sem_grid, 
+        pc_grid, sem_grid, bev_voxels,
         num_classes, valid_indexes
     ):
     """ 
@@ -285,6 +363,7 @@ def visualize_outputs(
     # **************************************
     # Visualize input image
     # **************************************
+    os.system('mkdir -p debug_outputs')
     vis = plt.imshow(img)
     plt.savefig('debug_outputs/1_example_obs.png', bbox_inches='tight')
     plt.close()
@@ -306,7 +385,6 @@ def visualize_outputs(
     # **************************************
     # visualize unprojected 3D point clouds
     # **************************************
-    os.system('mkdir -p debug_outputs')
     print('Point shape (after filtering):', points.shape)
     print('\tX range [m] (lateral):', points[:,0].min().round(2), points[:,0].max().round(2))
     print('\tY range [m] (height) :', points[:,1].min().round(2), points[:,1].max().round(2))
@@ -318,6 +396,23 @@ def visualize_outputs(
     pc.export('debug_outputs/5_example_pc_colored.glb')
     pc = trimesh.points.PointCloud(vertices=points, colors=sem_colors)
     pc.export('debug_outputs/6_example_pc_semantic.glb')
+    # **************************************
+    # visualize BEV voxels
+    # **************************************
+    bev_voxels = np.ma.masked_where(bev_voxels == -1, bev_voxels)
+    vis = plt.imshow(
+        bev_voxels.T, # Transpose to align with (X, Z) expectations
+        origin='lower',
+        extent=[cfg_bev.xlim[0], cfg_bev.xlim[1], cfg_bev.zlim[0], cfg_bev.zlim[1]],
+        cmap=custom_cmap,
+        interpolation='nearest'
+    )
+    plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
+    plt.axis('equal')
+    plt.savefig('debug_outputs/7_example_bev.png', bbox_inches='tight')
+    plt.close()
+
+    
 
 
 debug_func(xlim=cfg_bev.xlim, zlim=cfg_bev.zlim)
