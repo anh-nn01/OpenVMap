@@ -26,7 +26,7 @@
                 00.glb
                 01.glb
                 ...
-            + global_
+            + global_3D_semantic.npy
     av2/
         ...
     ```
@@ -34,6 +34,8 @@
 ### B. Model 
 1. Complete pipeline: 2D image to 3D semantic point cloud
 2. Complete pipeline: 2D video to global 3D semantic point cloud
+    * save to `2d_semantic/`, `depth/`, and `intrinsics/`
+    * save to `3d_semantic/` and `global_3d_semantic.npy`
 3. Modify vector map decoder
 
 ### Experiments
