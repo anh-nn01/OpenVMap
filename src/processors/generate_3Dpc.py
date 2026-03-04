@@ -34,8 +34,8 @@ class PointCloud3DGenerator:
         #   => save only the (1) intrinsics and (2) depth map instead
         prediction = self.model.inference(
             images,
-            export_dir=export_dir, # export_dir: not saving any final PC results.
-            export_format="glb",  # Options: glb, npz, ply, mini_npz, gs_ply, gs_video,
+            export_dir=None, # export_dir: not saving any final PC results.
+            # export_format="glb",  # Options: glb, npz, ply, mini_npz, gs_ply, gs_video,
             show_cameras=False,
             # process_res=max(sample_img.size),
         )
