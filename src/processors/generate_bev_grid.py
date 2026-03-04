@@ -20,6 +20,7 @@ import torch
 import trimesh
 import cv2
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, BoundaryNorm
 from PIL import Image
 
 sys.path.append(f"{pwd}/../configs")
@@ -158,11 +159,19 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     # (2c) Assign semantic labels to points
     #   sem_grids: (H,W,1)
     #   sem_grids[u,v] = <semantic class index>
+    # 
+    # Step: (1) match each point to a semantic class
+    #           => tie break: assign highest index
+    #       (2) +=1: valid semantic index starts at 1
+    #                => 0 = unassigned index
     # ============================================================
     # Stack all mask across classes: (N_class, H_d, W_d)
     masks = np.stack([mask_dict[semantic_class] for semantic_class in mask_dict], axis=0)
     # (N_class, H_d, W_d) -> (1, H_d, W_d)
-    sem_grid = np.argmax(masks[::-1], axis=0) # class tie break: use the class at the higher index
+    # semantic class tie break: use the class at the higher index
+    #   e.g. a pixel having both  class 0 (drivable) and class 3 (crosswalk), use class 3 (crosswalk)
+    sem_grid_reverse_idx = np.argmax(masks[::-1], axis=0) 
+    sem_grid = (num_classes-1) - sem_grid_reverse_idx # use original index order
     sem_grid = masks.max(0).astype(np.uint8) * (sem_grid + 1) # semantic index starts at 1; 0 = unmatched class
     # print(sem_grids.shape)
     # ============================================================
@@ -202,7 +211,10 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     # ============================================================
     # (3b) Construct semantic BEV semantic voxels from 3D pc
     # ============================================================
-    # bev_voxels = construct_bev_voxels(points, semantics, grid_size=cfg_bev.voxel_size)
+    bev_voxels = construct_bev_voxels(
+        points, semantics, grid_size=cfg_bev.voxel_size,
+        xlim=xlim, ylim=ylim, zlim=zlim
+    )
 
 def construct_bev_voxels(
         points, semantics, grid_size, xlim=None, ylim=None, zlim=None
@@ -242,9 +254,10 @@ def visualize_outputs(
     semantics = sem_grid.reshape(-1,1) # Point semantic classes
     
     # semantic colors for visualization
-    cmap = plt.get_cmap('tab20', num_classes+1)
+    cmap = plt.get_cmap('tab20b', num_classes+1)
     palette = (cmap(np.arange(num_classes + 1))[:, :3] * 255).astype(np.uint8)
     palette[0] = np.array([128, 128, 128], dtype=np.uint8) # index 0 = gray: unmatched class
+    palette[1] = np.array([10, 128, 10], dtype=np.uint8) # index 1 = green: drivable areas
     sem_colors = palette[semantics].reshape(-1,3)  # (N, 3)
     H_d, W_d = depth.shape[:2]
     sem_visualization = sem_colors.reshape((H_d, W_d, 3))
@@ -262,17 +275,22 @@ def visualize_outputs(
     # **************************************
     vis = plt.imshow(img)
     plt.savefig('debug_outputs/1_example_obs.png', bbox_inches='tight')
+    plt.close()
     # **************************************
     # Visualize depth map
     # **************************************
     vis = plt.imshow(depth, cmap='Spectral', vmin=5, vmax=50)
     plt.colorbar(vis, label='Depth [meters]', orientation='horizontal',)
     plt.savefig('debug_outputs/2_example_depth.png', bbox_inches='tight')
+    plt.close()
     # **************************************
     # Visualize semantic map
     # **************************************
-    vis = plt.imshow(sem_visualization)
+    custom_cmap = ListedColormap(palette / 255.0)
+    vis = plt.imshow(sem_visualization, cmap=custom_cmap)
+    plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
     plt.savefig('debug_outputs/3_example_semantic.png', bbox_inches='tight')
+    plt.close()
     # **************************************
     # visualize unprojected 3D point clouds
     # **************************************
@@ -290,7 +308,7 @@ def visualize_outputs(
     pc.export('debug_outputs/6_example_pc_semantic.glb')
 
 
-debug_func(zlim=(0,35))
+debug_func(xlim=cfg_bev.xlim, zlim=cfg_bev.zlim)
 
 # ###############################################
 # # Match shape of the mask to the depth
