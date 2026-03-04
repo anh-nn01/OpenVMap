@@ -13,6 +13,7 @@
 #        => more generalizable to different sensor setups
 # [NOTE] points: filter out noisy 3D points
 # [NOTE] bev_voxel: max pool along Y (height) first, then along XZ
+# [NOTE] bev_voxel: post-processing: use ZX kernel size = (5)
 
 
 
