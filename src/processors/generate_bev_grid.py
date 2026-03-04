@@ -7,7 +7,7 @@
 
 # [NOTE] use conda venv for DA3 for this script
 # [NOTE] adjust 3D coordinates by avg ground height (drivable lane index = 1)
-#        => avg Y of (all points associated with (1) drivable lane and (2) <= 5 meters of depth)
+#        => avg Y of (all points associated with (1) drivable lane and (2) in point cloud of interest)
 #        => more generalizable to different sensor setups
 
 import os
@@ -25,6 +25,9 @@ from PIL import Image
 
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
+
+# valid class index +=1 (0 = unknown class)
+semantic_class_idx = cfg_bev.SEMANTIC_CLASSES.index('drivable road area')+1 
 
 def load_semantic_masks(path):
     data = np.load(path, allow_pickle=True)
@@ -80,6 +83,7 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     path_depth =  f'{pwd}/../examples/nusc/eg_{eg_id}/da3_output/depth.npy' 
     # path_points = f'{pwd}/../examples/nusc/eg_5/da3_output/scene.glb'
 
+    """ (I) Load perception inputs """
     # ============================================================
     # (1a) Load camera intrinsics
     #   K: (3, 3) camera intrinsic matrix
@@ -119,6 +123,7 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     
     
     
+    """ (II) Construct 3D point cloud and semantic maps """
     # ============================================================
     # (2a) Build pixel coordinate grid
     #   uv_grid: (H, W, 2)
@@ -174,34 +179,18 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     sem_grid = (num_classes-1) - sem_grid_reverse_idx # use original index order
     sem_grid = masks.max(0).astype(np.uint8) * (sem_grid + 1) # semantic index starts at 1; 0 = unmatched class
     # print(sem_grids.shape)
-    # ============================================================
-    # (2d) Filter out 3D points based on point cloud range
-    # ============================================================
+
+
+
+
+    """ (III) Extract points of interest """
     points = pc_grid.reshape(-1,3) # points in (HxW, 3)
     semantics = sem_grid.reshape(-1,1) # semantic class in (HxW, 1)
-    # filter points based on point cloud range
-    valid_indexes = extract_points(points, xlim, ylim, zlim)
-    # **************************************
-    # Visualization: must be here
-    # **************************************
-    visualize_outputs(
-        img, D, 
-        sem_grid, num_classes,
-        points, valid_indexes
-    )
-    # filter points
-    points = points[valid_indexes]
-    semantics = semantics[valid_indexes]
-
-
-
-
     # ============================================================
     # (3a) Compute average ground height in camera pose
-    #       => define ylim
+    #       => adaptively define ylim (height)
     # ============================================================
-    # filter ground points
-    points_ground = points[semantics[:,0] == 1] # drivable lanes
+    points_ground = points[semantics[:,0] == semantic_class_idx] # drivable lanes
     # points_ground = points_ground[points_ground[:,2] <= 10] # within 5 meter depth
     avg_ground_height = points_ground[:,1].mean() # average ground height
     print('\nAvg ground height in cam frame:', avg_ground_height.round(2), '[m]')
@@ -209,47 +198,70 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     if not ylim:
         ylim = (avg_ground_height-1, avg_ground_height + cfg_bev.BEV_HEIGHT)
     # ============================================================
+    # (2d) Filter out 3D points based on point cloud range
+    # ============================================================
+    # filter points based on point cloud range
+    valid_indexes = extract_points(points, xlim, ylim, zlim)
+    # filter points
+    points = points[valid_indexes]
+    semantics = semantics[valid_indexes]
+    
+    
+    # ============================================================
     # (3b) Construct semantic BEV semantic voxels from 3D pc
     # ============================================================
     bev_voxels = construct_bev_voxels(
         points, semantics, grid_size=cfg_bev.voxel_size,
-        xlim=xlim, ylim=ylim, zlim=zlim
+    )
+
+
+
+
+    # **************************************
+    # Visualization: must be here
+    # **************************************
+    visualize_outputs(
+        img, D, 
+        pc_grid, sem_grid, 
+        num_classes, valid_indexes
     )
 
 def construct_bev_voxels(
-        points, semantics, grid_size, xlim=None, ylim=None, zlim=None
+        points, semantics, grid_size,
     ):
     """
         Construct BEV grid voxels from semantic point cloud
 
-            points: 3D point cloud sets
-            semantics: associated semantic class sets
+            points: 3D point cloud sets (N_,3)
+            semantics: associated semantic class sets (N_,1)
             grid_size: voxel size in metric [m]
-            xlim: point cloud range in metric [m]
-            ylim: point cloud range in metric [m]
-            zlim: point cloud range in metric [m]
             
         Output: bev voxels filled with semantic class indexes
                 default: -1 = no point matched (e.g. occlusion)
     """
-    bev_grid = None
+    # # Extract BEV in metric space
+    # valid_indices = True
+    # valid_indices = valid_indices & (points >)
+
+    # bev_grid = None
     pass
 
     
 def visualize_outputs(
         img, depth, 
-        sem_grid, num_classes,
-        points, valid_indexes
+        pc_grid, sem_grid, 
+        num_classes, valid_indexes
     ):
     """ 
         Visualization:
         
-            img: input image (H,W,3)
-            depth: estimated metric depth (H,W,1)
-            sem_grid: multi-class semantic mask (H,W,1)
-            points: unprojected 3D points (HxW,3)
+            img: input image (H,W,3) (rgb)
+            depth: estimated metric depth (H,W,1) (metric depth)
+            pc_grid: unprojected 3D point cloud grids (H,W,3) ([X,Y,Z])
+            sem_grid: multi-class semantic mask (H,W,1) (sematic class)
             valid_indexes: extracted points of interest 
     """
+    points = pc_grid.reshape(-1,3)
     colors = img.reshape(-1, 3) # Point colors from RGB image
     semantics = sem_grid.reshape(-1,1) # Point semantic classes
     
