@@ -34,6 +34,8 @@
     av2/
         ...
     ```
+2. Modify `CustomNuScenesOfflineLocalMapDataset`: include Globally Constructed 3D Local BEV 
+3. Modify all classes in `train_pipeline` and `test_pipeline`: properly handle Globally Constructed 3D Local BEV 
 
 ### B. Model 
 1. Complete pipeline: 2D image to 3D semantic point cloud
