@@ -15,6 +15,7 @@ pip install -e . # Basic
 pip install --no-build-isolation git+https://github.com/nerfstudio-project/gsplat.git@0b4dddf04cb687367602c01196913cde6a743d70 # for gaussian head
 pip install -e ".[app]" # Gradio, python>=3.10
 pip install -e ".[all]" # ALL
+pip install nuscenes-devkit==1.2.0
 ```
 
 Read more about the model [Here](https://huggingface.co/depth-anything/DA3NESTED-GIANT-LARGE-1.1).
