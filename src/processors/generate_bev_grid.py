@@ -102,63 +102,45 @@ def get_radius_filter_mask(points, nb_points=8, radius=0.5):
     return mask
 
 
-def debug_func(xlim=None, ylim=None, zlim=None):
-    #############################
-    # Debugging
-    #############################
-    eg_id = 5
-    # path_img = '../examples/nusc/img_2/n008-2018-05-21-11-06-59-0400__CAM_FRONT__1526915292912465.jpg'
-    # path_img = '../examples/nusc/img_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg'
-    # path_img = '../examples/nusc/img_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
-    path_img = '../examples/nusc/img_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
-    # path_img = '../examples/nusc/img_6/val_front_275.jpg'
-    path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
-    path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/intrinsics.npy'
-    path_depth =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/depth.npy' 
 
-    """ (I) Load perception inputs """
+def img_reconstruct_3D_points(
+        img, mask_dict, K, D, xlim=None, ylim=None, zlim=None,
+    ):
+    """
+    Function to reconstruct a 3D point cloud from a monocular image.
+
+    Inputs:
+        + img: input monocular image
+        + mask_dict: dictionary of semantic masks
+            format: {<class_name>: np.array(H, W)}
+        + K: camera intrinsic matrix
+        + D: metric depth map
+        + xlim: lateral range of interest for the point cloud (x-axis)
+        + ylim: height range of interest for the point cloud (y-axis)
+        + zlim: forward range of interest for the point cloud (z-axis)
+
+    Outputs: (pc_grid, sem_grid, valid_indexes)
+
+        + pc_grid: 3D position corresponding to each pixel
+            shape: (H, W, 3)
+
+        + sem_grid: semantic class index for each pixel
+            shape: (H, W, 1)
+            note:
+                class indices start at 1
+                index 0 = pixels without a semantic class
+
+        + valid_indexes: indices of pixels whose reconstructed 3D points
+            fall within the specified (xlim, ylim, zlim) ranges
+
+            usage:
+                points = pc_grid.reshape(-1, 3)[valid_indexes]
+                semantics = sem_grid.reshape(-1, 1)[valid_indexes]
+    """
+
+    """ (I) Construct 3D point cloud and semantic maps """
     # ============================================================
-    # (1a) Load camera intrinsics
-    #   K: (3, 3) camera intrinsic matrix
-    # ============================================================
-    K = load_intrinsics(path_intrinsic)
-    # ============================================================
-    # (1b) Load depth map
-    #   D: (H_d, W_d) depth in meters (Z-axis depth)
-    # ============================================================
-    D = load_depth(path_depth)
-    H_d, W_d = D.shape
-    print('Depth spatial shape:', H_d, W_d)
-    print('Depth min/max [m]:', D.min(), D.max())
-    # ============================================================
-    # (1c) Load semantic masks
-    #   mask_dict: { <class_name> : np.array }
-    # ============================================================
-    mask_dict = load_semantic_masks(path_masks)
-    num_classes = len(mask_dict)
-    assert len(mask_dict) == len(cfg_bev.SEMANTIC_CLASSES)
-    first_key = next(iter(mask_dict))
-    H_m, W_m = mask_dict[first_key].shape[1:]
-    print('Mask spatial shape :', H_m, W_m)
-    # Match shape of the mask to the depth
-    for idx, semantic_class in enumerate(mask_dict):
-        # (1,H,W) -> (H,W) -> (H_d, W_d)
-        print(f'\tSemantic class {idx+1}: {semantic_class}')
-        mask = mask_dict[semantic_class].astype(np.float32)[0]
-        mask = cv2.resize(mask, (W_d, H_d), interpolation=cv2.INTER_LINEAR)
-        mask_dict[semantic_class] = (mask >= 0.5).astype(np.float32)
-    # ============================================================
-    # (1d) Load RGB image (resized to depth resolution)
-    # ============================================================
-    img = Image.open(path_img)
-    img = np.asarray(img)
-    img = cv2.resize(img, (W_d, H_d), interpolation=cv2.INTER_LINEAR)
-    
-    
-    
-    """ (II) Construct 3D point cloud and semantic maps """
-    # ============================================================
-    # (2a) Build pixel coordinate grid
+    # (1a) Build pixel coordinate grid
     #   uv_grid: (H, W, 2)
     #   uv_grid[v, u] = [u, v]
     #
@@ -174,7 +156,7 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     # print(uv_grid.shape)
     # print(uv_grid[95,98])
     # ============================================================
-    # (2b) Back-project depth map to 3D camera coordinates
+    # (1b) Back-project depth map to 3D camera coordinates
     #
     # Formula:
     #   [X,Y,Z]^T = D(u,v) * (K^{-1} @ [u,v,1]^T)
@@ -194,7 +176,7 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     pc_grid[:,:,0] *=-1
     pc_grid[:,:,1] *=-1
     # ============================================================
-    # (2c) Assign semantic labels to points
+    # (1c) Assign semantic labels to points
     #   sem_grids: (H,W,1)
     #   sem_grids[u,v] = <semantic class index>
     # 
@@ -216,11 +198,11 @@ def debug_func(xlim=None, ylim=None, zlim=None):
 
 
 
-    """ (III) Extract points of interest """
+    """ (II) Extract points of interest """
     points = pc_grid.reshape(-1,3) # points in (HxW, 3)
     semantics = sem_grid.reshape(-1,1) # semantic class in (HxW, 1)
     # ============================================================
-    # (3a) Compute average ground height in camera pose
+    # (2a) Compute average ground height in camera pose
     #       => adaptively define ylim (height)
     # ============================================================
     points_ground = points[semantics[:,0] == semantic_class_idx] # drivable lanes
@@ -231,41 +213,21 @@ def debug_func(xlim=None, ylim=None, zlim=None):
     if not ylim:
         ylim = (avg_ground_height-1, avg_ground_height + cfg_bev.BEV_HEIGHT)
     # ============================================================
-    # (3b) Filter out 3D points based on point cloud range
+    # (2b) Filter out 3D points based on point cloud range
     # ============================================================
     # filter points based on point cloud range
     valid_indexes = extract_points(points, xlim, ylim, zlim)
     # ============================================================
-    # (3c) Filter out noisy 3D points
+    # (2c) Filter out noisy 3D points
     # ============================================================
     # filter_noise_indexes = statistical_filter_3Dnoises(points)
     filter_noise_indexes = get_radius_filter_mask(points)
     valid_indexes = valid_indexes & filter_noise_indexes
-    # filter points
-    points = points[valid_indexes]
-    semantics = semantics[valid_indexes]
-    
-    
-    # ============================================================
-    # (3c) Construct semantic BEV semantic voxels from 3D pc
-    # ============================================================
-    bev_voxels = construct_bev_voxels(
-        points, semantics, voxel_size=cfg_bev.voxel_size,
-        xlim=xlim, zlim=zlim,
-    )
-    print(bev_voxels.shape)
+    # # filter points
+    # points = points[valid_indexes]
+    # semantics = semantics[valid_indexes]
 
-
-
-
-    # **************************************
-    # Visualization: must be here
-    # **************************************
-    visualize_outputs(
-        img, D, 
-        pc_grid, sem_grid, bev_voxels,
-        num_classes, valid_indexes
-    )
+    return pc_grid, sem_grid, valid_indexes
 
 def construct_bev_voxels(
         points, semantics, voxel_size,
@@ -414,7 +376,89 @@ def visualize_outputs(
     
 
 
-debug_func(xlim=cfg_bev.xlim, zlim=cfg_bev.zlim)
+if __name__ == '__main__': # for demo purposes
+    # debug_func(xlim=cfg_bev.xlim, zlim=cfg_bev.zlim)
+    #############################
+    # Debugging
+    #############################
+    eg_id = 5
+    # path_img = '../examples/nusc/img_2/n008-2018-05-21-11-06-59-0400__CAM_FRONT__1526915292912465.jpg'
+    # path_img = '../examples/nusc/img_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg'
+    # path_img = '../examples/nusc/img_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
+    path_img = '../examples/nusc/img_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
+    # path_img = '../examples/nusc/img_6/val_front_275.jpg'
+    path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
+    path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/intrinsics.npy'
+    path_depth =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/depth.npy' 
+
+    """ (I) Load perception inputs """
+    # ============================================================
+    # (1a) Load camera intrinsics
+    #   K: (3, 3) camera intrinsic matrix
+    # ============================================================
+    K = load_intrinsics(path_intrinsic)
+    # ============================================================
+    # (1b) Load depth map
+    #   D: (H_d, W_d) depth in meters (Z-axis depth)
+    # ============================================================
+    D = load_depth(path_depth)
+    H_d, W_d = D.shape
+    print('Depth spatial shape:', H_d, W_d)
+    print('Depth min/max [m]:', D.min(), D.max())
+    # ============================================================
+    # (1c) Load semantic masks
+    #   mask_dict: { <class_name> : np.array }
+    # ============================================================
+    mask_dict = load_semantic_masks(path_masks)
+    num_classes = len(mask_dict)
+    assert len(mask_dict) == len(cfg_bev.SEMANTIC_CLASSES)
+    first_key = next(iter(mask_dict))
+    H_m, W_m = mask_dict[first_key].shape[1:]
+    print('Mask spatial shape :', H_m, W_m)
+    # Match shape of the mask to the depth
+    for idx, semantic_class in enumerate(mask_dict):
+        # (1,H,W) -> (H,W) -> (H_d, W_d)
+        print(f'\tSemantic class {idx+1}: {semantic_class}')
+        mask = mask_dict[semantic_class].astype(np.float32)[0]
+        mask = cv2.resize(mask, (W_d, H_d), interpolation=cv2.INTER_LINEAR)
+        mask_dict[semantic_class] = (mask >= 0.5).astype(np.float32)
+    # ============================================================
+    # (1d) Load RGB image (resized to depth resolution)
+    # ============================================================
+    img = Image.open(path_img)
+    img = np.asarray(img)
+    img = cv2.resize(img, (W_d, H_d), interpolation=cv2.INTER_LINEAR)
+
+
+
+    # ============================================================
+    # (2) 3D point cloud reconstruction
+    # ============================================================
+    pc_grid, sem_grid, valid_indexes = img_reconstruct_3D_points(
+        img, mask_dict, K, D,
+        xlim=cfg_bev.xlim, zlim=cfg_bev.zlim, 
+        # ylim (height) is determined automatically based on cfg_bev.BEV_HEIGHT
+    )
+    # extract points of interest
+    points = pc_grid.reshape(-1,3)[valid_indexes]
+    semantics = sem_grid.reshape(-1,1)[valid_indexes]
+    
+    # ============================================================
+    # (3) Construct semantic BEV semantic voxels from 3D pc
+    # ============================================================
+    bev_voxels = construct_bev_voxels(
+        points, semantics, voxel_size=cfg_bev.voxel_size,
+        xlim=cfg_bev.xlim, zlim=cfg_bev.zlim,
+    )
+
+    # **************************************
+    # Visualization: must be here
+    # **************************************
+    visualize_outputs(
+        img, D, 
+        pc_grid, sem_grid, bev_voxels,
+        num_classes, valid_indexes
+    )
 
 # ###############################################
 # # Match shape of the mask to the depth
