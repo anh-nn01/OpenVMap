@@ -381,11 +381,11 @@ if __name__ == '__main__': # for demo purposes
     #############################
     # Debugging
     #############################
-    eg_id = 4
+    eg_id = 5
     # path_img = '../examples/nusc/img_2/n008-2018-05-21-11-06-59-0400__CAM_FRONT__1526915292912465.jpg'
     # path_img = '../examples/nusc/img_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg'
-    path_img = '../examples/nusc/img_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
-    # path_img = '../examples/nusc/img_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
+    # path_img = '../examples/nusc/img_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
+    path_img = '../examples/nusc/img_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
     # path_img = '../examples/nusc/img_6/val_front_275.jpg'
     path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
     path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/intrinsics.npy'
