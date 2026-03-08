@@ -47,8 +47,14 @@ class Semantic2DGenerator:
 		os.makedirs(export_dir, exist_ok=True)
 		np.savez(os.path.join(export_dir, "semantic_masks.npz"), **masks)
 
+		return masks
+
 """ This is for testing on a single image only
 	To process on the whole folder, import the above functions
+
+	python generate_semantics.py \
+	--img_path= \
+	--export_dir= \
 """
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Generate 2D semantics from monocular image")
