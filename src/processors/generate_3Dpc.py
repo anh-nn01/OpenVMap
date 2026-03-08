@@ -28,6 +28,10 @@ class PointCloud3DGenerator:
         Args:
             images: list of image paths 
             (for multiview; for monocular, use list of [single_image_path])
+
+        Outputs:
+            depth: estimated metric depth map
+            K: intrinsic parameters
         """
         # Run inference on images and save to export_dir
         #   => export_dir=None, not saving any 3D point cloud results
@@ -73,6 +77,7 @@ class PointCloud3DGenerator:
         # print(K.round(5))
         # print(s)
         # print(np.linalg.inv(K))
+        return depth, K
 
 
 """ This is for testing on a single image only
@@ -80,8 +85,8 @@ class PointCloud3DGenerator:
 
     Example:
     python generate_3Dpc.py \
-    --img_path=../examples/nusc/eg_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg \
-    --export_dir=../examples/nusc/eg_4/da3_output/
+    --img_path=../examples/nusc/img_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg \
+    --export_dir=../examples/nusc/img_4/da3_output/
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate 3D point cloud from monocular image")
