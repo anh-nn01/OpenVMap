@@ -86,12 +86,12 @@ class PointCloud3DGenerator:
     Example:
     python generate_3Dpc.py \
     --img_path=../examples/nusc/img_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg \
-    --export_dir=../examples/nusc/img_4/da3_output/
+    --export_path=../examples/nusc/img_4/da3_output/
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate 3D point cloud from monocular image")
     parser.add_argument("--img_path", type=str, required=True, help="Path to input image")
-    parser.add_argument("--export_dir", type=str, default=None, help="Directory to save output 3D point cloud")
+    parser.add_argument("--export_path", type=str, default=None, help="Directory to save output 3D point cloud")
     args = parser.parse_args()
 
     # generate 3D point cloud and save to export_dir

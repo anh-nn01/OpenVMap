@@ -38,7 +38,7 @@ conda activate sam3
 cd src/processors/
 python generate_semantics.py \
 --img_path=<PATH_TO_IMG> \
---export_dir=<PATH_TO_MASKS> \
+--export_path=<PATH_TO_MASKS> \
 ```
 
 #### Simple Python Usage

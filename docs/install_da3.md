@@ -36,7 +36,7 @@ module load gcc/14.2.0
 cd src/processors/
 python generate_3Dpc.py \
 --img_path=<PATH_TO_IMG> \
---export_dir=<PATH_TO_OUTPUTS> \
+--export_path=<PATH_TO_OUTPUTS> \
 ```
 
 #### Simple Python usage

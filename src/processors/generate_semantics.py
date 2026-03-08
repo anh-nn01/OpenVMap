@@ -54,12 +54,12 @@ class Semantic2DGenerator:
 
 	python generate_semantics.py \
 	--img_path= \
-	--export_dir= \
+	--export_path= \
 """
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Generate 2D semantics from monocular image")
 	parser.add_argument("--img_path", type=str, required=True, help="Path to input image")
-	parser.add_argument("--export_dir", type=str, required=True, help="Directory to save output semantic masks")
+	parser.add_argument("--export_path", type=str, required=True, help="Directory to save output semantic masks")
 	args = parser.parse_args()
 
 	# generate 2D semantics and save to export_dir
