@@ -34,6 +34,14 @@ conda activate sam3
 ```
 
 #### Simple Usage
+```sh
+cd src/processors/
+python generate_semantics.py \
+--img_path=<PATH_TO_IMG> \
+--export_dir=<PATH_TO_MASKS> \
+```
+
+#### Simple Python Usage
 ```python
 import sys
 sys.path.append('<PATH_TO_YOUR_SAM3_FOLDER>')

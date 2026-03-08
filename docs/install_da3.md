@@ -30,7 +30,16 @@ conda activate da3
 module load cuda/12.4.1
 module load gcc/14.2.0
 ```
-#### Simple usage
+
+#### Simple Usage
+```sh
+cd src/processors/
+python generate_3Dpc.py \
+--img_path=<PATH_TO_IMG> \
+--export_dir=<PATH_TO_OUTPUTS> \
+```
+
+#### Simple Python usage
 ```python
 import torch
 import sys
