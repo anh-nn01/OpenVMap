@@ -29,13 +29,11 @@ class Semantic2DGenerator:
 		self.model = build_sam3_image_model()
 		self.processor = Sam3Processor(self.model)
 		self.threshold = threshold
-		# Semantic classes
-		self.semantic_classes = SEMANTIC_CLASSES
 
-	def generate_2Dsem(self, image):
+	def generate_2Dsem(self, image, semantic_classes=SEMANTIC_CLASSES):
 		inference_state = self.processor.set_image(image)
 		masks = {}
-		for prompt in self.semantic_classes:
+		for prompt in semantic_classes:
 			output = self.processor.set_text_prompt(state=inference_state, prompt=prompt)
 			# Get the masks, bounding boxes, and scores
 			# masks, boxes, scores = output["masks"], output["boxes"], output["scores"]
@@ -61,7 +59,9 @@ if __name__ == "__main__":
 	# generate 2D semantics and save to export_path
 	generator = Semantic2DGenerator()
 	image = Image.open(args.img_path)
-	masks = generator.generate_2Dsem(image)
+	masks = generator.generate_2Dsem(
+		image, semantic_classes=SEMANTIC_CLASSES
+	)
 	# save masks to export_dir
 	os.makedirs(args.export_path, exist_ok=True)
 	np.savez(os.path.join(args.export_path, "semantic_masks.npz"), **masks)
