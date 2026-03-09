@@ -15,6 +15,8 @@ from depth_anything_3.api import DepthAnything3
 import numpy as np
 from PIL import Image
 
+import time
+
 class PointCloud3DGenerator:
     def __init__(self):
         # Model initialization is done globally to avoid reloading the model for every image
@@ -91,7 +93,10 @@ if __name__ == "__main__":
 
     # generate 3D point cloud and save to export_dir
     generator = PointCloud3DGenerator()
+    start = time.time()
     depth, K = generator.generate_3Dpc([args.img_path])
+    end = time.time()
+    print('Total DA3 runtime / image:', round(end-start,3), 'seconds.')
     # save depth and intrinsics
     os.makedirs(args.export_path, exist_ok=True)
     np.save(os.path.join(args.export_path, 'depth.npy'), depth)
