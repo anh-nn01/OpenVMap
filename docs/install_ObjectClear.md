@@ -24,3 +24,11 @@ export HOME=/fs/nexus-projects/open_vectormap/ # replace your project directory 
 source $HOME/miniconda3/bin/activate
 conda activate sam3
 ```
+
+#### Simple Usage
+```sh
+cd src/processors/
+python generate_semantics.py \
+--img_path=<PATH_TO_IMG> \
+--export_path=<PATH_TO_CLEARED_IMG> \
+```
