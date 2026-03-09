@@ -20,6 +20,8 @@ from sam3.model.sam3_image_processor import Sam3Processor
 sys.path.append(f"{pwd}/../configs")
 from cfg_bev import SEMANTIC_CLASSES
 
+import time
+
 
 class Semantic2DGenerator:
 	def __init__(self, threshold=0.15):
@@ -59,9 +61,12 @@ if __name__ == "__main__":
 	# generate 2D semantics and save to export_path
 	generator = Semantic2DGenerator()
 	image = Image.open(args.img_path)
+	start = time.time()
 	masks = generator.generate_2Dsem(
 		image, semantic_classes=SEMANTIC_CLASSES
 	)
+	end = time.time()
+	print('Total SAM3 runtime / image:', round(end-start,3), 'seconds.')
 	# save masks to export_dir
 	os.makedirs(args.export_path, exist_ok=True)
 	np.savez(os.path.join(args.export_path, "semantic_masks.npz"), **masks)
