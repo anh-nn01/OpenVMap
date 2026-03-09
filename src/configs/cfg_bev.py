@@ -3,7 +3,8 @@ OCCLUSION_CLASSES = [
 ]
 SEMANTIC_CLASSES = [
 	# fundamental road elements
-	"drivable road area", "lane divider", "lane marking", "crosswalk area",
+	# "drivable road area", "lane divider", "lane marking", "crosswalk area",
+	"road", "lane divider", "lane marking", "crosswalk area",
 	# union these elements to form a single class
 	"curb", 
 	# dynamic objects / obstacles
