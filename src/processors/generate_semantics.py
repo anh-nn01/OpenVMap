@@ -32,8 +32,7 @@ class Semantic2DGenerator:
 		# Semantic classes
 		self.semantic_classes = SEMANTIC_CLASSES
 
-	def generate_2Dsem(self, image_path, export_dir):
-		image = Image.open(image_path)
+	def generate_2Dsem(self, image):
 		inference_state = self.processor.set_image(image)
 		masks = {}
 		for prompt in self.semantic_classes:
@@ -59,10 +58,10 @@ if __name__ == "__main__":
 	parser.add_argument("--export_path", type=str, required=True, help="Directory to save output semantic masks")
 	args = parser.parse_args()
 
-	# generate 2D semantics and save to export_dir
+	# generate 2D semantics and save to export_path
 	generator = Semantic2DGenerator()
-	masks = generator.generate_2Dsem(args.img_path, args.export_path)
-	
+	image = Image.open(args.img_path)
+	masks = generator.generate_2Dsem(image)
 	# save masks to export_dir
 	os.makedirs(args.export_path, exist_ok=True)
 	np.savez(os.path.join(args.export_path, "semantic_masks.npz"), **masks)
