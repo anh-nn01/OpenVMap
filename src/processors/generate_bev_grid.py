@@ -35,7 +35,7 @@ sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
 # valid class index +=1 (0 = unknown class)
-semantic_class_idx = cfg_bev.SEMANTIC_CLASSES.index('drivable road area')+1 
+semantic_class_idx = cfg_bev.SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
 
 def load_semantic_masks(path):
     data = np.load(path, allow_pickle=True)
@@ -324,16 +324,16 @@ def visualize_outputs(
     # **************************************
     # Visualize input image
     # **************************************
-    os.system('mkdir -p debug_outputs')
+    os.system(f'mkdir -p {output_path}')
     vis = plt.imshow(img)
-    plt.savefig('debug_outputs/1_example_obs.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/1_example_obs.png', bbox_inches='tight')
     plt.close()
     # **************************************
     # Visualize depth map
     # **************************************
     vis = plt.imshow(depth, cmap='Spectral', vmin=5, vmax=50)
     plt.colorbar(vis, label='Depth [meters]', orientation='horizontal',)
-    plt.savefig('debug_outputs/2_example_depth.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/2_example_depth.png', bbox_inches='tight')
     plt.close()
     # **************************************
     # Visualize semantic map
@@ -341,7 +341,7 @@ def visualize_outputs(
     custom_cmap = ListedColormap(palette / 255.0)
     vis = plt.imshow(sem_visualization, cmap=custom_cmap)
     plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
-    plt.savefig('debug_outputs/3_example_semantic.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/3_example_semantic.png', bbox_inches='tight')
     plt.close()
     # **************************************
     # visualize unprojected 3D point clouds
@@ -352,11 +352,11 @@ def visualize_outputs(
     print('\tZ range [m] (forward):', points[:,2].min().round(2), points[:,2].max().round(2))
     # point cloud
     pc = trimesh.points.PointCloud(vertices=points)
-    pc.export('debug_outputs/4_example_pc.glb')
+    pc.export(f'{output_path}/4_example_pc.glb')
     pc = trimesh.points.PointCloud(vertices=points, colors=colors)
-    pc.export('debug_outputs/5_example_pc_colored.glb')
+    pc.export(f'{output_path}/5_example_pc_colored.glb')
     pc = trimesh.points.PointCloud(vertices=points, colors=sem_colors)
-    pc.export('debug_outputs/6_example_pc_semantic.glb')
+    pc.export(f'{output_path}/6_example_pc_semantic.glb')
     # **************************************
     # visualize BEV voxels
     # **************************************
@@ -370,7 +370,7 @@ def visualize_outputs(
     )
     plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
     plt.axis('equal')
-    plt.savefig('debug_outputs/7_example_bev.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/7_example_bev.png', bbox_inches='tight')
     plt.close()
 
     
@@ -381,15 +381,24 @@ if __name__ == '__main__': # for demo purposes
     #############################
     # Debugging
     #############################
-    eg_id = 5
+    # output_path = 'debug_outputs/initial/'
+    # eg_id = 6
     # path_img = '../examples/nusc/img_2/n008-2018-05-21-11-06-59-0400__CAM_FRONT__1526915292912465.jpg'
     # path_img = '../examples/nusc/img_4/n008-2018-08-01-15-16-36-0400__CAM_FRONT__1533151605512404.jpg'
     # path_img = '../examples/nusc/img_3/n008-2018-08-01-15-52-19-0400__CAM_FRONT__1533153350162404.jpg'
-    path_img = '../examples/nusc/img_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
+    # path_img = '../examples/nusc/img_5/n015-2018-07-24-11-22-45+0800__CAM_FRONT__1532402942162460.jpg'
     # path_img = '../examples/nusc/img_6/val_front_275.jpg'
+    # path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
+    # path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/intrinsics.npy'
+    # path_depth =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/depth.npy' 
+
+    
+    output_path = 'debug_outputs/occfree/'
+    eg_id = 6
+    path_img = f'../examples/nusc/img_{eg_id}/img_occlusion_free.jpg'
     path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
-    path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/intrinsics.npy'
-    path_depth =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output/depth.npy' 
+    path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output_occfree/intrinsics.npy'
+    path_depth =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output_occfree/depth.npy' 
 
     """ (I) Load perception inputs """
     # ============================================================
