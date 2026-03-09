@@ -57,11 +57,6 @@ class PointCloud3DGenerator:
         # print('Image shape      :', image.shape)
         # print('Depth shape      :', depth.shape)
         # print('Intrinsics shape :', K.shape)
-        
-        # save depth and intrinsics
-        os.makedirs(export_dir, exist_ok=True)
-        np.save(os.path.join(export_dir, 'depth.npy'), depth)
-        np.save(os.path.join(export_dir, 'intrinsics.npy'), K)
 
         # # Access results
         # print('Depth shape:', prediction.depth.shape)        # Depth maps: [N, H, W] float32
@@ -96,4 +91,8 @@ if __name__ == "__main__":
 
     # generate 3D point cloud and save to export_dir
     generator = PointCloud3DGenerator()
-    generator.generate_3Dpc([args.img_path], args.export_path)
+    depth, K = generator.generate_3Dpc([args.img_path], args.export_path)
+    # save depth and intrinsics
+    os.makedirs(args.export_path, exist_ok=True)
+    np.save(os.path.join(args.export_path, 'depth.npy'), depth)
+    np.save(os.path.join(args.export_path, 'intrinsics.npy'), K)
