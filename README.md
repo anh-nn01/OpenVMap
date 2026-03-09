@@ -11,6 +11,7 @@
 3. Dependencies installation
     * [Encoder] Install [Depth Anything 3](docs/install_da3.md)
     * [Encoder] Install [Segment Anything 3](docs/install_sam3.md)
+    * [Encoder] Install [ObjectClear](docs/install_ObjectClear.md)
     * [Decoder] Install [MapTRv2]()
 
 
@@ -37,8 +38,9 @@ project-root/
         ├── nusc/
         └── av2/
     ├── processors/
-        ├── generate_3Dpc.py
         ├── generate_semantics.py
+        ├── generate_occulusion_free.py
+        ├── generate_3Dpc.py
         └── generate_bev_grid.py
     ├── models
         ├── map_decoder
