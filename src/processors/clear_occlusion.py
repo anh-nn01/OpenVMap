@@ -19,7 +19,7 @@ import numpy as np
 
 from generate_semantics import Semantic2DGenerator
 sys.path.append(f"{pwd}/../configs")
-from cfg_bev import OCCLUSION_CLASSES
+from cfg_bev import OCCLUSION_CLASSES, SEG_THRESHOLD
 
 import time
 
@@ -113,8 +113,9 @@ if __name__ == "__main__":
     # 1. initialize occlusion free image generator
     generator_clear = OcclusionFreeGenerator()
     # 2. initialize occlusion mask generator
-    generator_sam3 = Semantic2DGenerator()
+    generator_sam3 = Semantic2DGenerator(threshold=SEG_THRESHOLD)
     # 3. occlusion masking
+    start = time.time()
     occ_masks = generator_sam3.generate_2Dsem(
 		image, semantic_classes=OCCLUSION_CLASSES
 	)
@@ -122,6 +123,8 @@ if __name__ == "__main__":
     occ_mask = (occ_mask * 255).astype(np.uint8) # Convert to 0-255 uint8 format
     occ_mask = occ_mask[0] # (1,H,W) => (H,W)
     occ_mask = Image.fromarray(occ_mask, mode='L')
+    end = time.time()
+    print('Total SAM3 runtime / image:', round(end-start,3), 'seconds.')
     
     # 4. generate occlusion-free image and save to export_path
     images = [image]

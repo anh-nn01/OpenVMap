@@ -10,6 +10,7 @@ SEMANTIC_CLASSES = [
 	# dynamic objects / obstacles
 	# "vehicle", "pedestrian", "pole",
 ]
+SEG_THRESHOLD = 0.2 # Semantic threshold
 
 ###################################
 # map BEV voxels

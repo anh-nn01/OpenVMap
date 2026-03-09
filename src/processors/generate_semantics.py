@@ -18,7 +18,7 @@ from sam3.model_builder import build_sam3_image_model
 from sam3.model.sam3_image_processor import Sam3Processor
 
 sys.path.append(f"{pwd}/../configs")
-from cfg_bev import SEMANTIC_CLASSES
+from cfg_bev import SEMANTIC_CLASSES, SEG_THRESHOLD
 
 import time
 
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	# generate 2D semantics and save to export_path
-	generator = Semantic2DGenerator()
+	generator = Semantic2DGenerator(threshold=SEG_THRESHOLD)
 	image = Image.open(args.img_path)
 	start = time.time()
 	masks = generator.generate_2Dsem(

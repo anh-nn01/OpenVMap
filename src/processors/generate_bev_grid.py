@@ -394,7 +394,7 @@ if __name__ == '__main__': # for demo purposes
 
     
     output_path = 'debug_outputs/occfree/'
-    eg_id = 6
+    eg_id = 5
     path_img = f'../examples/nusc/img_{eg_id}/img_occlusion_free.jpg'
     path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
     path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output_occfree/intrinsics.npy'
@@ -430,7 +430,7 @@ if __name__ == '__main__': # for demo purposes
         print(f'\tSemantic class {idx+1}: {semantic_class}')
         mask = mask_dict[semantic_class].astype(np.float32)[0]
         mask = cv2.resize(mask, (W_d, H_d), interpolation=cv2.INTER_LINEAR)
-        mask_dict[semantic_class] = (mask >= 0.5).astype(np.float32)
+        mask_dict[semantic_class] = (mask >= cfg_bev.SEG_THRESHOLD).astype(np.float32)
     # ============================================================
     # (1d) Load RGB image (resized to depth resolution)
     # ============================================================
