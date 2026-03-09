@@ -43,9 +43,6 @@ class Semantic2DGenerator:
 			# sum over all individual object masks
 			masks[prompt] = output["masks"].sum(0).cpu().numpy()
 			masks[prompt] = (masks[prompt] > self.threshold).astype(np.uint8) * 255
-		# save masks to export_dir
-		os.makedirs(export_dir, exist_ok=True)
-		np.savez(os.path.join(export_dir, "semantic_masks.npz"), **masks)
 
 		return masks
 
@@ -64,4 +61,8 @@ if __name__ == "__main__":
 
 	# generate 2D semantics and save to export_dir
 	generator = Semantic2DGenerator()
-	generator.generate_2Dsem(args.img_path, args.export_dir)
+	masks = generator.generate_2Dsem(args.img_path, args.export_path)
+	
+	# save masks to export_dir
+	os.makedirs(args.export_path, exist_ok=True)
+	np.savez(os.path.join(args.export_path, "semantic_masks.npz"), **masks)
