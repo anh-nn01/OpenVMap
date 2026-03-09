@@ -23,7 +23,7 @@ class PointCloud3DGenerator:
         self.model = DepthAnything3.from_pretrained("depth-anything/da3nested-giant-large")
         self.model = self.model.to(device=self.device)
 
-    def generate_3Dpc(self, images, export_dir):
+    def generate_3Dpc(self, images):
         """ 
         Args:
             images: list of image paths 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     # generate 3D point cloud and save to export_dir
     generator = PointCloud3DGenerator()
-    depth, K = generator.generate_3Dpc([args.img_path], args.export_path)
+    depth, K = generator.generate_3Dpc([args.img_path])
     # save depth and intrinsics
     os.makedirs(args.export_path, exist_ok=True)
     np.save(os.path.join(args.export_path, 'depth.npy'), depth)
