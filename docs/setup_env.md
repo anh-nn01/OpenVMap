@@ -5,8 +5,9 @@ export TMPDIR=$HOME/tmp
 mkdir -p ~/tmp
 
 source $HOME/miniconda3/bin/activate
-conda create --prefix $HOME/miniconda3/envs/universal python=3.12 -y
+conda create --prefix $HOME/miniconda3/envs/universal python=3.11 -y
 conda activate universal
+module load gcc/14.2.0
 
 ##########################################
 # Install Depth Anything 3 dependencies
