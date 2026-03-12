@@ -7,14 +7,14 @@ mkdir -p ~/tmp
 source $HOME/miniconda3/bin/activate
 conda create --prefix $HOME/miniconda3/envs/universal python=3.11 -y
 conda activate universal
-module load gcc/14.2.0
+module load gcc/14.2.0 # important: use gcc>=14.0
 
 ##########################################
 # Install Depth Anything 3 dependencies
 ##########################################
 # git clone https://github.com/ByteDance-Seed/Depth-Anything-3.git
 cd $HOME/Depth-Anything-3/
-pip install xformers torch\>=2 torchvision
+pip install xformers torch==2.7.0 torchvision
 pip install -e . # Basic
 pip install --no-build-isolation git+https://github.com/nerfstudio-project/gsplat.git@0b4dddf04cb687367602c01196913cde6a743d70 # for gaussian head
 pip install -e ".[app]" # Gradio, python>=3.10
