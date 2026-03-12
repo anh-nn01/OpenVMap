@@ -14,6 +14,8 @@
     * [Encoder] Install [ObjectClear](docs/install_ObjectClear.md)
     * [Decoder] Install [MapTRv2]()
 
+* Or you can setup 1 single [universal env](docs/setup_env.md) for all Encoders
+
 
 ## Project Structure
 <pre>
