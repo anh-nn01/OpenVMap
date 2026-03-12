@@ -35,7 +35,9 @@ sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
 # valid class index +=1 (0 = unknown class)
-semantic_class_idx = cfg_bev.SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
+road_class_idx = cfg_bev.SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
+lane_marking_class_idx = cfg_bev.SEMANTIC_CLASSES.index('lane marking')+1
+crosswalk_class_idx = cfg_bev.SEMANTIC_CLASSES.index('crosswalk area')+1
 
 def load_semantic_masks(path):
     data = np.load(path, allow_pickle=True)
@@ -205,7 +207,7 @@ def img_reconstruct_3D_points(
     # (2a) Compute average ground height in camera pose
     #       => adaptively define ylim (height)
     # ============================================================
-    points_ground = points[semantics[:,0] == semantic_class_idx] # drivable lanes
+    points_ground = points[semantics[:,0] == road_class_idx] # drivable lanes
     # points_ground = points_ground[points_ground[:,2] <= 10] # within 5 meter depth
     avg_ground_height = points_ground[:,1].mean() # average ground height
     print('\nAvg ground height in cam frame:', avg_ground_height.round(2), '[m]')
@@ -307,8 +309,10 @@ def visualize_outputs(
     # semantic colors for visualization
     cmap = plt.get_cmap('tab20b', num_classes+1)
     palette = (cmap(np.arange(num_classes + 1))[:, :3] * 255).astype(np.uint8)
-    palette[0] = np.array([128, 128, 128], dtype=np.uint8) # index 0 = gray: unmatched class
-    palette[1] = np.array([10, 128, 10], dtype=np.uint8) # index 1 = green: drivable areas
+    palette[0] = np.array([128, 128, 128], dtype=np.uint8)              # index 0 = gray: unmatched class
+    palette[road_class_idx] = np.array([10, 128, 10], dtype=np.uint8)           # index 1 = green: drivable areas
+    palette[lane_marking_class_idx] = np.array([255, 165, 10], dtype=np.uint8)  # index 3 = orange: lane marking
+    palette[crosswalk_class_idx] = np.array([10, 10, 255], dtype=np.uint8)     # index 4 = orange: cross walk area
     sem_colors = palette[semantics].reshape(-1,3)  # (N, 3)
     H_d, W_d = depth.shape[:2]
     sem_visualization = sem_colors.reshape((H_d, W_d, 3))
