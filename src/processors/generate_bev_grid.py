@@ -82,8 +82,10 @@ def extract_points(points, xlim=None, ylim=None, zlim=None):
 
     
 def statistical_filter_3Dnoises(points, nb_neighbors=20, std_ratio=2.0):
+    """ NOTE: segmentation fault when np>=2.0"""
     # Convert numpy to Open3D PointCloud
     pcd = o3d.geometry.PointCloud()
+    points = np.ascontiguousarray(points, dtype=np.float64)
     pcd.points = o3d.utility.Vector3dVector(points)
     # cl: filtered pcd, ind: list of inlier indices
     cl, ind = pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, 
@@ -139,6 +141,8 @@ def img_reconstruct_3D_points(
                 points = pc_grid.reshape(-1, 3)[valid_indexes]
                 semantics = sem_grid.reshape(-1, 1)[valid_indexes]
     """
+    num_classes = len(mask_dict)
+    H_d, W_d = D.shape
 
     """ (I) Construct 3D point cloud and semantic maps """
     # ============================================================
@@ -222,12 +226,9 @@ def img_reconstruct_3D_points(
     # ============================================================
     # (2c) Filter out noisy 3D points
     # ============================================================
-    # filter_noise_indexes = statistical_filter_3Dnoises(points)
-    filter_noise_indexes = get_radius_filter_mask(points)
-    valid_indexes = valid_indexes & filter_noise_indexes
-    # # filter points
-    # points = points[valid_indexes]
-    # semantics = semantics[valid_indexes]
+    # # filter_noise_indexes = statistical_filter_3Dnoises(points)
+    # filter_noise_indexes = get_radius_filter_mask(points)
+    # valid_indexes = valid_indexes & filter_noise_indexes
 
     return pc_grid, sem_grid, valid_indexes
 
@@ -291,7 +292,8 @@ def construct_bev_voxels(
 def visualize_outputs(
         img, depth, 
         pc_grid, sem_grid, bev_voxels,
-        num_classes, valid_indexes
+        num_classes, valid_indexes,
+        output_path,
     ):
     """ 
         Visualization:
@@ -301,6 +303,7 @@ def visualize_outputs(
             pc_grid: unprojected 3D point cloud grids (H,W,3) ([X,Y,Z])
             sem_grid: multi-class semantic mask (H,W,1) (sematic class)
             valid_indexes: extracted points of interest 
+            output_path: output visualization path
     """
     points = pc_grid.reshape(-1,3)
     colors = img.reshape(-1, 3) # Point colors from RGB image
@@ -364,18 +367,19 @@ def visualize_outputs(
     # **************************************
     # visualize BEV voxels
     # **************************************
-    bev_voxels = np.ma.masked_where(bev_voxels == -1, bev_voxels)
-    vis = plt.imshow(
-        bev_voxels.T, # Transpose to align with (X, Z) expectations
-        origin='lower',
-        extent=[cfg_bev.xlim[0], cfg_bev.xlim[1], cfg_bev.zlim[0], cfg_bev.zlim[1]],
-        cmap=custom_cmap,
-        interpolation='nearest'
-    )
-    plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
-    plt.axis('equal')
-    plt.savefig(f'{output_path}/7_example_bev.png', bbox_inches='tight')
-    plt.close()
+    if bev_voxels is not None:
+        bev_voxels = np.ma.masked_where(bev_voxels == -1, bev_voxels)
+        vis = plt.imshow(
+            bev_voxels.T, # Transpose to align with (X, Z) expectations
+            origin='lower',
+            extent=[cfg_bev.xlim[0], cfg_bev.xlim[1], cfg_bev.zlim[0], cfg_bev.zlim[1]],
+            cmap=custom_cmap,
+            interpolation='nearest'
+        )
+        plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
+        plt.axis('equal')
+        plt.savefig(f'{output_path}/7_example_bev.png', bbox_inches='tight')
+        plt.close()
 
     
 
@@ -470,7 +474,8 @@ if __name__ == '__main__': # for demo purposes
     visualize_outputs(
         img, D, 
         pc_grid, sem_grid, bev_voxels,
-        num_classes, valid_indexes
+        num_classes, valid_indexes,
+        output_path,
     )
 
 # ###############################################
