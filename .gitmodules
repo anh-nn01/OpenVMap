@@ -4,3 +4,6 @@
 [submodule "sam3"]
 	path = sam3
 	url = https://github.com/facebookresearch/sam3.git
+[submodule "ObjectClear"]
+	path = ObjectClear
+	url = https://github.com/zjx0101/ObjectClear.git
