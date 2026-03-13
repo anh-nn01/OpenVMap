@@ -47,19 +47,19 @@ def vectorize_map(points, semantics):
     #############################
     # Vectorize crosswalk area  #
     #############################
-    polylines = vectorize_crosswalk(points, semantics)
+    polylines = vectorize_convex_crosswalk(points, semantics)
     polylines_dict['crosswalk'] = polylines
 
 
     return polylines_dict
 
 
-def vectorize_crosswalk(points, semantics):
+def vectorize_convex_crosswalk(points, semantics):
     """ Vectorize crosswalk areas from the point cloud
         Geometry: DBSCAN + Chan's Convex Hull Algorithm
 
         TODO: minimize number of points
-        TODO: should cover non-convexity due to occlusions?
+        TODO: should inherently cover non-convexity due to occlusions?
         
         Args:
             points: 3D point cloud
@@ -71,7 +71,7 @@ def vectorize_crosswalk(points, semantics):
     # 3D points of crosswalk areas
     valid_indexes = semantics[:,0] == crosswalk_class_idx
     if valid_indexes.sum() <= 20: # <= 20 crosswalk pointcloud
-        return np.array([]) # empty: no crosswalk area
+        return [] # empty: no crosswalk area
 
     # Extract points of semantic class
     points_crosswalk = points[valid_indexes]
@@ -91,9 +91,11 @@ def vectorize_crosswalk(points, semantics):
             hull = ConvexHull(cluster_points)
             # Extract the key points (vertices)
             polylines.append(cluster_points[hull.vertices])
-    polylines = np.array(polylines)
     
     return polylines
+
+
+
 
 def visualize_map(polylines_dict, output_path):
     """ Visualize the vectorized polylines for each semantic type """
