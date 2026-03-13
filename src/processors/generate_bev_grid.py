@@ -34,7 +34,7 @@ import open3d as o3d
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
-from vectorize import vectorize_map
+from vectorize import vectorize_map, visualize_map
 
 # valid class index +=1 (0 = unknown class)
 road_class_idx = cfg_bev.SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
@@ -404,7 +404,7 @@ if __name__ == '__main__': # for demo purposes
 
     
     output_path = 'debug_outputs/occfree/'
-    eg_id = 4
+    eg_id = 6
     path_img = f'../examples/nusc/img_{eg_id}/img_occlusion_free.jpg'
     path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
     path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output_occfree/intrinsics.npy'
@@ -481,7 +481,8 @@ if __name__ == '__main__': # for demo purposes
     )
     
     
-    vectorize_map(points, semantics)
+    polylines_dict = vectorize_map(points, semantics)
+    visualize_map(polylines_dict, output_path)
 
 # ###############################################
 # # Match shape of the mask to the depth

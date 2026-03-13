@@ -51,7 +51,7 @@ def vectorize_map(points, semantics):
     polylines_dict['crosswalk'] = polylines
 
 
-    visualize(polylines_dict)
+    return polylines_dict
 
 
 def vectorize_crosswalk(points, semantics, eps=1.0):
@@ -91,14 +91,14 @@ def vectorize_crosswalk(points, semantics, eps=1.0):
     
     return polylines
 
-def visualize(polylines_dict):
+def visualize_map(polylines_dict, output_path):
     """ Visualize the vectorized polylines for each semantic type """
     plt.figure(figsize=(12, 10))
     
     # Define a color map for different types
     colors = {
-        'boundary': 'red',
-        'crosswalk': 'blue'
+        'boundary': 'green',
+        'crosswalk': 'blue',
     }
 
     for label, polylines in polylines_dict.items():
@@ -112,7 +112,7 @@ def visualize(polylines_dict):
             closed_poly = np.vstack([poly, poly[0]])
             
             # Plot the outline
-            plt.plot(closed_poly[:, 0], closed_poly[:, 1], color=color, 
+            plt.plot(closed_poly[:, 0], closed_poly[:, 1], '-o', color=color, 
                      linewidth=2, label=label if i == 0 else "")
             
             # Fill crosswalks to make them look like real road markings
@@ -120,9 +120,13 @@ def visualize(polylines_dict):
                 plt.fill(closed_poly[:, 0], closed_poly[:, 1], color=color, alpha=0.3)
 
     plt.axis('equal') # Maintain real-world proportions
-    plt.xlabel('X [m]')
-    plt.ylabel('Z [m]')
-    plt.title('Vectorized BEV Map')
+    plt.xlim(cfg_bev.xlim) # lateral
+    plt.ylim(cfg_bev.zlim) # forward 
+    plt.xlabel('X [m]', fontsize=12)
+    plt.ylabel('Z [m]', fontsize=12)
+    plt.gca().invert_xaxis() # flip x axis: 3D points x-direction points to the left
+    # plt.title('Vectorized BEV Map', fontsize=16)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.show()
+    # plt.show()
+    plt.savefig(os.path.join(output_path, 'map_polylines.png'))
