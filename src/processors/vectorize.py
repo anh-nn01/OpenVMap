@@ -54,14 +54,16 @@ def vectorize_map(points, semantics):
     return polylines_dict
 
 
-def vectorize_crosswalk(points, semantics, eps=1.0):
+def vectorize_crosswalk(points, semantics):
     """ Vectorize crosswalk areas from the point cloud
         Geometry: DBSCAN + Chan's Convex Hull Algorithm
+
+        TODO: minimize number of points
+        TODO: should cover non-convexity due to occlusions?
         
         Args:
             points: 3D point cloud
             semantics: corresponding semantics
-            eps: maximum distance to grouped in the same cluster [meters]
         Outputs:
             polylines: polyline of crosswalk areas
     """
@@ -77,7 +79,9 @@ def vectorize_crosswalk(points, semantics, eps=1.0):
     points_crosswalk = points_crosswalk[:,[0,2]]
 
     # Produce convex hull
-    clustering = DBSCAN(eps=eps, min_samples=50).fit(points_crosswalk)
+    clustering = DBSCAN(
+        eps=cfg_bev.eps_crosswalk, min_samples=cfg_bev.min_points_crosswalk
+    ).fit(points_crosswalk)
     labels = clustering.labels_
     # Compute convex hull for each cluster (ignoring noise label -1)
     for label in set(labels):

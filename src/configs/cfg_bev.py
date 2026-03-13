@@ -1,5 +1,5 @@
 OCCLUSION_CLASSES = [
-	"pedestrian", "vehicle", "pole",
+	"people", "vehicle", "pole", # "pedestrian"
 ]
 SEMANTIC_CLASSES = [
 	# fundamental road elements
@@ -20,4 +20,8 @@ voxel_size = 0.3 # voxel size, in meter
 xlim = (-15,15) # lateral
 ylim = None # dynamically adjusted based on avg ground level / cam height
 zlim = (0,30)  # depth
+
+# for vectorization
+eps_crosswalk = 1.0 # [meters] maximum distance to grouped in the same cluster 
+min_points_crosswalk = 50 # total points to be considered a valid crosswalk
 
