@@ -41,3 +41,11 @@ pip install -r hugging_face/requirements.txt --ignore-installed
 
 cd $HOME
 ```
+
+## Usage
+```sh
+export HOME=/fs/nexus-projects/open_vectormap/ # replace your project directory here
+source $HOME/miniconda3/bin/activate
+conda activate universal
+module load gcc/14.2.0 # important: use gcc>=14.0
+```
