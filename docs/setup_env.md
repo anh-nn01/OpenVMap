@@ -39,6 +39,7 @@ cd $HOME/ObjectClear/
 pip install -r requirements.txt --ignore-installed
 pip install -r hugging_face/requirements.txt --ignore-installed
 
+pip install alphashape==1.3.1
 cd $HOME
 ```
 
