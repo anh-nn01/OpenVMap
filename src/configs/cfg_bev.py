@@ -29,6 +29,8 @@ zlim = (0,30)  # depth
 
 # for vectorization
 eps_cluster = 2.5 # [meters] maximum distance to grouped in the same set of polyline
-min_points = 50 # total points to be considered a valid set of polyline
+min_points_crosswalk = 50 # total points to be considered a valid set of polyline
 alpha = 1.0 # alpha concave hull
+max_dist_nn = 0.5 # [meters] maximum distance to the nearest neighbor non-drivable to be considered boundary
+min_points_poly_boundary = 3 # total points in valid boundary polylines
 
