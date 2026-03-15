@@ -30,16 +30,21 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from PIL import Image
 import open3d as o3d
+import time
+from termcolor import colored
+import copy
 
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
-from vectorize import vectorize_map, visualize_map
+from vectorize import vectorize_convex_crosswalk, vectorize_drivable_boundaries, visualize_map
 
-# valid class index +=1 (0 = unknown class)
-road_class_idx = cfg_bev.SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
-lane_marking_class_idx = cfg_bev.SEMANTIC_CLASSES.index('lane marking')+1
-crosswalk_class_idx = cfg_bev.SEMANTIC_CLASSES.index('crosswalk area')+1
+
+road_class_idx = cfg_bev.road_class_idx # 'drivable road area'
+lane_marking_class_idx = cfg_bev.lane_marking_class_idx
+crosswalk_class_idx = cfg_bev.crosswalk_class_idx
+
+road_class_name = 'road' # dict key name of 'drivable road area'
 
 def load_semantic_masks(path):
     data = np.load(path, allow_pickle=True)
@@ -296,6 +301,12 @@ def visualize_outputs(
         pc_grid, sem_grid, bev_voxels,
         num_classes, valid_indexes,
         output_path,
+        visual_name_obs='1_example_obs.png',
+        visual_name_depth='2_example_depth.png',
+        visual_name_semantic='3_example_semantic.png',
+        visual_name_3Dpc='4_example_pc.glb',
+        visual_name_3Drgb='5_example_pc_colored.glb',
+        visual_name_3Dsem='6_example_pc_semantic.glb',
     ):
     """ 
         Visualization:
@@ -335,14 +346,14 @@ def visualize_outputs(
     # **************************************
     os.system(f'mkdir -p {output_path}')
     vis = plt.imshow(img)
-    plt.savefig(f'{output_path}/1_example_obs.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/{visual_name_obs}', bbox_inches='tight')
     plt.close()
     # **************************************
     # Visualize depth map
     # **************************************
     vis = plt.imshow(depth, cmap='Spectral', vmin=5, vmax=50)
     plt.colorbar(vis, label='Depth [meters]', orientation='horizontal',)
-    plt.savefig(f'{output_path}/2_example_depth.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/{visual_name_depth}', bbox_inches='tight')
     plt.close()
     # **************************************
     # Visualize semantic map
@@ -350,7 +361,7 @@ def visualize_outputs(
     custom_cmap = ListedColormap(palette / 255.0)
     vis = plt.imshow(sem_visualization, cmap=custom_cmap)
     plt.colorbar(vis, ticks=np.arange(num_classes + 1), label='semantic colors', orientation='horizontal',)
-    plt.savefig(f'{output_path}/3_example_semantic.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}/{visual_name_semantic}', bbox_inches='tight')
     plt.close()
     # **************************************
     # visualize unprojected 3D point clouds
@@ -361,11 +372,11 @@ def visualize_outputs(
     print('\tZ range [m] (forward):', points[:,2].min().round(2), points[:,2].max().round(2))
     # point cloud
     pc = trimesh.points.PointCloud(vertices=points)
-    pc.export(f'{output_path}/4_example_pc.glb')
+    pc.export(f'{output_path}/{visual_name_3Dpc}')
     pc = trimesh.points.PointCloud(vertices=points, colors=colors)
-    pc.export(f'{output_path}/5_example_pc_colored.glb')
+    pc.export(f'{output_path}/{visual_name_3Drgb}')
     pc = trimesh.points.PointCloud(vertices=points, colors=sem_colors)
-    pc.export(f'{output_path}/6_example_pc_semantic.glb')
+    pc.export(f'{output_path}/{visual_name_3Dsem}')
     # **************************************
     # visualize BEV voxels
     # **************************************
@@ -404,7 +415,7 @@ if __name__ == '__main__': # for demo purposes
 
     
     output_path = 'debug_outputs/occfree/'
-    eg_id = 6
+    eg_id = 8
     path_img = f'../examples/nusc/img_{eg_id}/img_occlusion_free.jpg'
     path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
     path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output_occfree/intrinsics.npy'
@@ -451,7 +462,8 @@ if __name__ == '__main__': # for demo purposes
 
 
     # ============================================================
-    # (2) 3D point cloud reconstruction
+    # (2a) Semantic 3D point cloud reconstruction:
+    #       multiple classes (each point per class)
     # ============================================================
     pc_grid, sem_grid, valid_indexes = img_reconstruct_3D_points(
         img, mask_dict, K, D,
@@ -461,6 +473,23 @@ if __name__ == '__main__': # for demo purposes
     # extract points of interest
     points = pc_grid.reshape(-1,3)[valid_indexes]
     semantics = sem_grid.reshape(-1,1)[valid_indexes]
+    # ============================================================
+    # (2a) Semantic 3D point cloud reconstruction:
+    #       central on road class (no tie-breaking crosswalk/lane markers)
+    #   Purpose: address semantic ambiguity for road polyline vectorization
+    # ============================================================
+    mask_dict_roadCentric = copy.deepcopy(mask_dict)
+    for sem_class in mask_dict_roadCentric:
+        if sem_class != road_class_name:
+            mask_dict_roadCentric[sem_class] *= 0 # suppress all non-road classes
+    pc_grid_roadCentric, sem_grid_roadCentric, valid_indexes_roadCentric = img_reconstruct_3D_points(
+        img, mask_dict_roadCentric, K, D,
+        xlim=cfg_bev.xlim, zlim=cfg_bev.zlim, 
+        # ylim (height) is determined automatically based on cfg_bev.BEV_HEIGHT
+    )
+    # extract points of interest
+    points_roadCentric = pc_grid_roadCentric.reshape(-1,3)[valid_indexes_roadCentric]
+    semantics_roadCentric = sem_grid_roadCentric.reshape(-1,1)[valid_indexes_roadCentric]
 
     # ============================================================
     # (3) Construct semantic BEV semantic voxels from 3D pc
@@ -473,15 +502,39 @@ if __name__ == '__main__': # for demo purposes
     # **************************************
     # Visualization: must be here
     # **************************************
+    # visualize full semantic
     visualize_outputs(
         img, D, 
-        pc_grid, sem_grid, bev_voxels,
-        num_classes, valid_indexes,
-        output_path,
+        pc_grid, sem_grid, 
+        bev_voxels=bev_voxels,
+        num_classes=num_classes, 
+        valid_indexes=valid_indexes,
+        output_path=output_path,
+    )
+    # visualize road only semantic: for vectorization
+    visualize_outputs(
+        img, D, 
+        pc_grid_roadCentric, sem_grid_roadCentric, 
+        bev_voxels=None,
+        num_classes=num_classes, 
+        valid_indexes=valid_indexes_roadCentric,
+        output_path=output_path,
+        visual_name_semantic='3_example_semantic_road.png',
+        visual_name_3Dsem='6_example_pc_semantic_road.glb',
     )
     
     
-    polylines_dict = vectorize_map(points, semantics)
+    # ============================================================
+    # (4) Vectorization
+    # ============================================================
+    polylines_dict = {
+        'boundary': None,
+        'crosswalk': None,
+    }
+    polylines_dict['crosswalk'] = vectorize_convex_crosswalk(points, semantics)
+    polylines_dict['boundary'] = vectorize_drivable_boundaries(
+        points_roadCentric, semantics_roadCentric
+    )
     visualize_map(polylines_dict, output_path)
 
 # ###############################################

@@ -17,41 +17,58 @@ from termcolor import colored
 import matplotlib.pyplot as plt
 
 from sklearn.cluster import DBSCAN
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, Delaunay, cKDTree
+import alphashape
+from shapely.geometry import MultiPoint
 
 # configs
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
 # valid class index +=1 (0 = unknown class)
-road_class_idx = cfg_bev.SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
-lane_marking_class_idx = cfg_bev.SEMANTIC_CLASSES.index('lane marking')+1
-crosswalk_class_idx = cfg_bev.SEMANTIC_CLASSES.index('crosswalk area')+1
+road_class_idx = cfg_bev.road_class_idx # 'drivable road area'
+lane_div_class_idx = cfg_bev.lane_div_class_idx
+lane_marking_class_idx = cfg_bev.lane_marking_class_idx
+crosswalk_class_idx = cfg_bev.crosswalk_class_idx
 
 
 
-def vectorize_map(points, semantics):
-    """ Vectorize BEV maps given semantic 3D point cloud
-        Args:
-            points: 3D point cloud
-            semantics: corresponding semantics
-        Outputs:
-            polyline_dict: vectorized polyline for each type
-    """
-    polylines_dict = {
-        'boundary': None,
-        'crosswalk': None,
-    }
+# def vectorize_map(points, semantics):
+#     """ Vectorize BEV maps given semantic 3D point cloud
+#         TODO: point cloud sparsification for speed up 
+
+#         Args:
+#             points: 3D point cloud
+#             semantics: corresponding semantics
+#         Outputs:
+#             polyline_dict: vectorized polyline for each type
+#     """
+#     polylines_dict = {
+#         'boundary': None,
+#         'crosswalk': None,
+#     }
     
 
-    #############################
-    # Vectorize crosswalk area  #
-    #############################
-    polylines = vectorize_convex_crosswalk(points, semantics)
-    polylines_dict['crosswalk'] = polylines
+#     #############################
+#     # Vectorize crosswalk area  #
+#     #############################
+#     start = time.time()
+#     polylines = vectorize_convex_crosswalk(points, semantics)
+#     polylines_dict['crosswalk'] = polylines
+#     end = time.time()
+#     print(colored(f'Crosswalk vectorization: {round(end-start, 5)} s', 'green'))
+
+#     #############################
+#     # Vectorize drivable area   #
+#     #############################
+#     start = time.time()
+#     polylines = vectorize_drivable_boundaries(points, semantics)
+#     polylines_dict['boundary'] = polylines
+#     end = time.time()
+#     print(colored(f'Drivable areas vectorization: {round(end-start, 5)} s', 'green'))
 
 
-    return polylines_dict
+#     return polylines_dict
 
 
 def vectorize_convex_crosswalk(points, semantics):
@@ -60,6 +77,7 @@ def vectorize_convex_crosswalk(points, semantics):
 
         TODO: minimize number of points
         TODO: should inherently cover non-convexity due to occlusions?
+        TODO: test difficult cases (heavy occlusion)
         
         Args:
             points: 3D point cloud
@@ -80,7 +98,7 @@ def vectorize_convex_crosswalk(points, semantics):
 
     # Produce convex hull
     clustering = DBSCAN(
-        eps=cfg_bev.eps_crosswalk, min_samples=cfg_bev.min_points_crosswalk
+        eps=cfg_bev.eps_cluster, min_samples=cfg_bev.min_points
     ).fit(points_crosswalk)
     labels = clustering.labels_
     # Compute convex hull for each cluster (ignoring noise label -1)
@@ -94,12 +112,60 @@ def vectorize_convex_crosswalk(points, semantics):
     
     return polylines
 
+def vectorize_drivable_boundaries(points, semantics):
+    """ Vectorize drivable area boundaries
+        
+        Args:
+            points: 3D point cloud
+            semantics: corresponding semantics
+        Outputs:
+            polylines: polyline of drivable areas
+    """
+    polylines = []
+    # 3D points of drivable areas (road + lane marking + crosswalk)
+    valid_indexes = np.isin(
+        semantics[:,0], 
+        [road_class_idx, lane_div_class_idx, lane_marking_class_idx, crosswalk_class_idx]
+    )
+    if valid_indexes.sum() <= 50: # <= 100 pointcloud
+        return [] # empty: no drivable area
+
+    # Extract points of semantic class
+    points_drivable = points[valid_indexes]
+    # Project to a single height plane (Y-axis)
+    points_drivable[:,1] = 0. # any constant => only care about X and Z
+    points_drivable = points_drivable[:,[0,2]]
+
+    # Cluster points in case drivable lanes are segregated
+    clustering = DBSCAN(
+        eps=cfg_bev.eps_cluster, min_samples=cfg_bev.min_points
+    ).fit(points_drivable)
+    labels = clustering.labels_
+    
+    # Compute concave hull for each cluster (ignoring noise label -1)
+    for label in set(labels):
+        if label == -1: continue
+        cluster_points = points_drivable[labels == label]
+        if len(cluster_points) >= 3:
+            concave_hull = alphashape.alphashape(cluster_points, cfg_bev.alpha)
+            if concave_hull.geom_type == 'Polygon':
+                # .coords returns (N, 2) including the closing point
+                points = np.array(concave_hull.exterior.coords)
+                polylines.append(points)
+            elif concave_hull.geom_type == 'MultiPolygon':
+                # Handle MultiPolygons (if alpha is too high, the cluster might split)
+                for poly in concave_hull.geoms:
+                    points = np.array(poly.exterior.coords)
+                    polylines.append(points)
+
+    return polylines
+
 
 
 
 def visualize_map(polylines_dict, output_path):
     """ Visualize the vectorized polylines for each semantic type """
-    plt.figure(figsize=(12, 10))
+    plt.figure(figsize=(10, 8))
     
     # Define a color map for different types
     colors = {
@@ -116,11 +182,10 @@ def visualize_map(polylines_dict, output_path):
         for i, poly in enumerate(polylines):
             # Ensure the polyline is closed for visualization (last point -> first point)
             closed_poly = np.vstack([poly, poly[0]])
-            
             # Plot the outline
-            plt.plot(closed_poly[:, 0], closed_poly[:, 1], '-o', color=color, 
+            plt.plot(closed_poly[:, 0], closed_poly[:, 1], color=color, 
                      linewidth=2, label=label if i == 0 else "")
-            
+            plt.scatter(closed_poly[:, 0], closed_poly[:, 1], color=color, s=10)
             # Fill crosswalks to make them look like real road markings
             if label == 'crosswalk':
                 plt.fill(closed_poly[:, 0], closed_poly[:, 1], color=color, alpha=0.3)

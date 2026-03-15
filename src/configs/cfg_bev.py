@@ -12,6 +12,12 @@ SEMANTIC_CLASSES = [
 ]
 SEG_THRESHOLD = 0.2 # Semantic threshold
 
+# valid class index +=1 (0 = unknown class)
+road_class_idx = SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
+lane_div_class_idx = SEMANTIC_CLASSES.index('lane divider')+1
+lane_marking_class_idx = SEMANTIC_CLASSES.index('lane marking')+1
+crosswalk_class_idx = SEMANTIC_CLASSES.index('crosswalk area')+1
+
 ###################################
 # map BEV voxels
 ###################################
@@ -22,6 +28,7 @@ ylim = None # dynamically adjusted based on avg ground level / cam height
 zlim = (0,30)  # depth
 
 # for vectorization
-eps_crosswalk = 1.0 # [meters] maximum distance to grouped in the same cluster 
-min_points_crosswalk = 50 # total points to be considered a valid crosswalk
+eps_cluster = 2.5 # [meters] maximum distance to grouped in the same set of polyline
+min_points = 50 # total points to be considered a valid set of polyline
+alpha = 1.0 # alpha concave hull
 
