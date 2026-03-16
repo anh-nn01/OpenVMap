@@ -37,6 +37,7 @@ import copy
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
+from vectorize import transform_point_density
 from vectorize import vectorize_convex_crosswalk, vectorize_drivable_boundaries, visualize_map
 
 
@@ -531,10 +532,19 @@ if __name__ == '__main__': # for demo purposes
         'boundary': None,
         'crosswalk': None,
     }
+    
+    start = time.time()
     polylines_dict['crosswalk'] = vectorize_convex_crosswalk(points, semantics)
+    end = time.time()
+    print(colored(f'Crosswalk vectorization: {round(end-start,3)} s.', 'green'))
+    
+    start = time.time()
     polylines_dict['boundary'] = vectorize_drivable_boundaries(
         points_roadCentric, semantics_roadCentric
     )
+    end = time.time()
+    print(colored(f'Drivable vectorization: {round(end-start,3)} s.', 'green'))
+
     visualize_map(polylines_dict, output_path)
 
 # ###############################################
