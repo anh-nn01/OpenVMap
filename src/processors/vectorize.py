@@ -72,72 +72,83 @@ crosswalk_class_idx = cfg_bev.crosswalk_class_idx
 #     return polylines_dict
 
 
-# def sparsify_points(points, grid_size):
-#     """
-#     Downsample points by keeping one point per grid cell.
+def sparsify_points(points, grid_size):
+    """
+    Downsample points by keeping one point per grid cell.
     
-#     Args:
-#         points: (N, 2) or (N, 3) array of coordinates
-#         grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
-#     Outputs:
-#         downsampled_points: (M, D) array where M <= N
-#     """
-#     # 1. Quantize the coordinates by dividing by grid_size and flooring
-#     grid_indices = np.floor(points / grid_size).astype(int)
-#     # 2. Find unique grid cells. return_index=True gives the first point in each cell.
-#     _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
-#     return points[unique_indices]
+    Args:
+        points: (N, 2) or (N, 3) array of coordinates
+        grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
+    Outputs:
+        downsampled_points: (M, D) array where M <= N
+    """
+    # 1. Quantize the coordinates by dividing by grid_size and flooring
+    grid_indices = np.floor(points / grid_size).astype(int)
+    # 2. Find unique grid cells. return_index=True gives the first point in each cell.
+    _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
+    return points[unique_indices]
 
-# def densify_points(points, semantics, grid_size):
+def densify_points(points, semantics, grid_size, k=5):
+    """ 
+    Semantic-grounded points upsampling using K-nearest neighbor (KD-Tree)
+
+    Args: 
+        points: (N, 2) or (N, 3) array of coordinates
+        semantics: (N, 1) or (N,) array of semantic index
+        grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
+        k: number of neighbors used for semantic voting
+
+    Outputs:
+        upsample_points: (M, D) array where M >= N
+        upsample_semantics: (M, 1) array of semantic labels
+    """
+    semantics = semantics.squeeze() # (N,)
+    # 1. Define the bounding box of the points
+    min_bound = np.min(points, axis=0)
+    max_bound = np.max(points, axis=0)
+    # 2. Create a dense grid of coordinates within that box
+    axes = [np.arange(min_b, max_b + grid_size, grid_size) 
+            for min_b, max_b in zip(min_bound, max_bound)]
+    grid_coords = np.stack(np.meshgrid(*axes), -1).reshape(-1, points.shape[1])
+    # 3. KDTree: find K nearest original points for each grid coordinate
+    tree = KDTree(points)
+    _, knn_idx = tree.query(grid_coords, k=k)
+    upsampled_points = grid_coords
+    # 4. Semantic voting among the K nearest neighbors
+    knn_labels = semantics[knn_idx]
+    if k == 1:
+        upsampled_semantics = knn_labels
+    else:
+        # majority vote
+        upsampled_semantics = np.apply_along_axis(
+            lambda x: np.bincount(x).argmax(), axis=1, arr=knn_labels
+        )
+    upsampled_semantics = upsampled_semantics.reshape(-1, 1) # (M,1)
+    return upsampled_points, upsampled_semantics
+
+
+# def transform_point_density(points, semantics, grid_size):
 #     """ 
-#     Semantic-grounded poins upsampling using nearest neighbor (KD-Tree)
+#     Semantic-grounded point density transformation using nearest neighbor
 
 #     Args: 
 #         points: (N, 2) or (N, 3) array of coordinates
 #         semantics: (N, 1) array of semantic index
 #         grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
 #     Outputs:
-#         upsample_points: (M, D) array where M >= N
+#         upsample_points: (M, D)
 #     """
-#     # 1. Define the bounding box of the points
-#     min_bound = np.min(points, axis=0)
-#     max_bound = np.max(points, axis=0)
-#     # 2. Create a dense grid of coordinates within that box
-#     axes = [np.arange(min_b, max_b + grid_size, grid_size) 
-#             for min_b, max_b in zip(min_bound, max_bound)]
-#     grid_coords = np.array(np.meshgrid(*axes)).T.reshape(-1, points.shape[1])
-#     # 3. Use a KDTree to find the nearest original point for each grid coordinate
-#     tree = KDTree(points)
-#     _, nearest_idx = tree.query(grid_coords)
-#     upsampled_points = grid_coords
-#     # 4. Map the semantics of the nearest original points to the new grid
-#     upsampled_semantics = semantics[nearest_idx]
-#     # Return the new dense coordinates (and optionally their labels)
+#     # 1. Snap points to the nearest grid center
+#     # Adding 0.5 ensures we snap to the middle of the cell, not the corner
+#     grid_indices = np.round(points / grid_size)
+#     grid_centers = grid_indices * grid_size
+#     # 2. Find unique grid centers to ensure uniform density (one point per cell)
+#     # return_index=True picks the nearest original semantic label for that cell
+#     _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
+#     upsampled_points = grid_centers[unique_indices]
+#     upsampled_semantics = semantics[unique_indices]
+
 #     return upsampled_points, upsampled_semantics
-
-
-def transform_point_density(points, semantics, grid_size):
-    """ 
-    Semantic-grounded point density transformation using nearest neighbor
-
-    Args: 
-        points: (N, 2) or (N, 3) array of coordinates
-        semantics: (N, 1) array of semantic index
-        grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
-    Outputs:
-        upsample_points: (M, D) array where M >= N
-    """
-    # 1. Snap points to the nearest grid center
-    # Adding 0.5 ensures we snap to the middle of the cell, not the corner
-    grid_indices = np.round(points / grid_size)
-    grid_centers = grid_indices * grid_size
-    # 2. Find unique grid centers to ensure uniform density (one point per cell)
-    # return_index=True picks the nearest original semantic label for that cell
-    _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
-    upsampled_points = grid_centers[unique_indices]
-    upsampled_semantics = semantics[unique_indices]
-
-    return upsampled_points, upsampled_semantics
 
 
 def vectorize_convex_crosswalk(points, semantics):
@@ -154,11 +165,11 @@ def vectorize_convex_crosswalk(points, semantics):
         Outputs:
             polylines: polyline of crosswalk areas
     """
-    # ===============================================
-    # (0) Transform point density for 
-    #   proper nearest-neighbor-based boundary matching
-    # ===============================================
-    points, semantics = transform_point_density(points, semantics, grid_size=cfg_bev.grid_size)
+    # # ===============================================
+    # # (0) Transform point density for 
+    # #   proper nearest-neighbor-based boundary matching
+    # # ===============================================
+    # points, semantics = transform_point_density(points, semantics, grid_size=cfg_bev.grid_size)
 
     polylines = []
     # 3D points of crosswalk areas
@@ -170,8 +181,8 @@ def vectorize_convex_crosswalk(points, semantics):
     points_crosswalk = points[valid_indexes]
     # Ignore height dimension
     points_crosswalk = points_crosswalk[:,[0,2]]
-    # # Point sparsification for speed up
-    # points_crosswalk = sparsify_points(points_crosswalk, grid_size=cfg_bev.grid_size)
+    # Point sparsification at dense areas for speed up
+    points_crosswalk = sparsify_points(points_crosswalk, grid_size=cfg_bev.grid_size)
 
     # Produce convex hull
     clustering = DBSCAN(
@@ -250,10 +261,11 @@ def vectorize_drivable_boundaries(points, semantics):
     """
     polylines = []
     # ===============================================
-    # (0) Transform point density for 
+    # (0) Point densification at sparse areas
     #   proper nearest-neighbor-based boundary matching
     # ===============================================
-    points, semantics = transform_point_density(points, semantics, grid_size=cfg_bev.grid_size)
+    # points, semantics = transform_point_density(points, semantics, grid_size=cfg_bev.grid_size)
+    # points, semantics = densify_points(points, semantics, grid_size=cfg_bev.max_dist_nn_phase1)
 
     # ===========================
     # 3D points of drivable areas (road + lane marking + crosswalk)
@@ -262,26 +274,43 @@ def vectorize_drivable_boundaries(points, semantics):
     if indexes_drivable.sum() <= 50: # <= 50 pointcloud
         return [] # empty: no drivable area
 
-    # Project to a single height plane (Y-axis)
-    points[:,1] = 0. # any constant => only care about X and Z
+
     # ===============================================
     # (1) Extract drivable and nondrivable points
     # ===============================================
+    # Project to a single height plane (Y-axis)
+    points[:,1] = 0. # any constant => only care about X and Z
     pts_drivable, pts_nondrivable = points[indexes_drivable], points[indexes_nondrivable]
     pts_drivable = pts_drivable[:,[0,2]] # X-axis and Z-axis
     pts_nondrivable = pts_nondrivable[:,[0,2]] # X-axis and Z-axis
-    # # ===============================================
-    # # (2) Point Sparsification for speed up
-    # # ===============================================
-    # pts_drivable = sparsify_points(pts_drivable, grid_size=cfg_bev.grid_size)
-    # pts_nondrivable = sparsify_points(pts_nondrivable, grid_size=cfg_bev.grid_size)
+    # ===============================================
+    # (2) Point Sparsification at dense areas for speed up
+    # ===============================================
+    pts_drivable = sparsify_points(pts_drivable, grid_size=cfg_bev.grid_size)
+    pts_nondrivable = sparsify_points(pts_nondrivable, grid_size=cfg_bev.grid_size)
 
     # ===============================================
     # (3) Search nondrivable points boundary to drivable points
     # ===============================================
-    nn = NearestNeighbors(n_neighbors=1).fit(pts_drivable)
-    dist, _ = nn.kneighbors(pts_nondrivable)
-    pts_boundary = pts_nondrivable[dist.flatten() <= cfg_bev.max_dist_nn_phase1]
+    # nn = NearestNeighbors(n_neighbors=1).fit(pts_drivable)
+    # dist, _ = nn.kneighbors(pts_nondrivable)
+    # pts_boundary = pts_nondrivable[dist.flatten() <= cfg_bev.max_dist_nn_phase1]
+    
+    pts_boundary = []
+    k = 5
+    # Convert (M,2) -> (M,3) once: [X,Z] to [X,Y,Z]
+    pts_drivable_3d = np.insert(pts_drivable, 1, 0.0, axis=1)
+    pts_nondrivable_3d = np.insert(pts_nondrivable, 1, 0.0, axis=1)
+    # Construct KDTree on drivable points
+    tree = cKDTree(pts_drivable_3d)
+    # Search boundary points based on k-nearest drivable neighbor
+    dists, neighbors = tree.query(pts_nondrivable_3d, k=k)
+    # print(dists.shape) # (N_nondrivable, k)
+    # Constrain max nearest neighbor distance
+    mask_boundary = np.any(dists <= cfg_bev.max_dist_nn_phase1, axis=1)
+    pts_boundary = pts_nondrivable[mask_boundary]
+    
+    # polylines.append(pts_boundary)
     
     # ===============================================
     # (4) Cluster points boundary points into polylines
@@ -295,19 +324,20 @@ def vectorize_drivable_boundaries(points, semantics):
     for label in set(poly_groups):
         if label == -1: continue
         cluster_points = pts_boundary[poly_groups == label]
-        # print(cluster_points.shape)
-        # ===============================================
-        # (5) Filter noisy/false positive boundary points
-        #   => area of non-drivable lane >= min_area
-        # ===============================================
-        try: # valid convex points
-            convex_hull = ConvexHull(cluster_points)
-            convex_area = convex_hull.volume
-            if convex_area < cfg_bev.min_area_boundary:
-                continue
-            polylines.append(cluster_points)
-        except: # coplanar points => invalid set, ignore
-            continue
+        polylines.append(cluster_points)
+        
+        # # ===============================================
+        # # (5) Filter noisy/false positive boundary points
+        # #   => area of non-drivable lane >= min_area
+        # # ===============================================
+        # try: # valid convex points
+        #     convex_hull = ConvexHull(cluster_points)
+        #     convex_area = convex_hull.volume
+        #     if convex_area < cfg_bev.min_area_boundary:
+        #         continue
+        #     polylines.append(cluster_points)
+        # except: # coplanar points => invalid set, ignore
+        #     continue
 
     return polylines
 

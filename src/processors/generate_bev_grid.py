@@ -37,7 +37,6 @@ import copy
 sys.path.append(f"{pwd}/../configs")
 import cfg_bev
 
-from vectorize import transform_point_density
 from vectorize import vectorize_convex_crosswalk, vectorize_drivable_boundaries, visualize_map
 
 
