@@ -43,6 +43,7 @@ max_dist_nn_phase1 = 1.0 # phase 1: for efficient densification + boundary point
 max_dist_nn_phase2 = 0.2 # phase 2: for filtering out true points
 # total points in valid boundary polylines
 min_points_poly_boundary = 3 
+k = 10 # k nearest neighbor (KDTree) for boundary identification
 # [meter^2] minimum area of nondrivable boundary to consider a valid boundary => ignore false positive areas
 min_area_boundary = 1
 

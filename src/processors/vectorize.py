@@ -297,14 +297,13 @@ def vectorize_drivable_boundaries(points, semantics):
     # pts_boundary = pts_nondrivable[dist.flatten() <= cfg_bev.max_dist_nn_phase1]
     
     pts_boundary = []
-    k = 5
     # Convert (M,2) -> (M,3) once: [X,Z] to [X,Y,Z]
     pts_drivable_3d = np.insert(pts_drivable, 1, 0.0, axis=1)
     pts_nondrivable_3d = np.insert(pts_nondrivable, 1, 0.0, axis=1)
     # Construct KDTree on drivable points
     tree = cKDTree(pts_drivable_3d)
     # Search boundary points based on k-nearest drivable neighbor
-    dists, neighbors = tree.query(pts_nondrivable_3d, k=k)
+    dists, neighbors = tree.query(pts_nondrivable_3d, k=cfg_bev.k)
     # print(dists.shape) # (N_nondrivable, k)
     # Constrain max nearest neighbor distance
     mask_boundary = np.any(dists <= cfg_bev.max_dist_nn_phase1, axis=1)
@@ -325,7 +324,7 @@ def vectorize_drivable_boundaries(points, semantics):
         if label == -1: continue
         cluster_points = pts_boundary[poly_groups == label]
         polylines.append(cluster_points)
-        
+
         # # ===============================================
         # # (5) Filter noisy/false positive boundary points
         # #   => area of non-drivable lane >= min_area
