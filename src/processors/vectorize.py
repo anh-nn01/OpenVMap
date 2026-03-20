@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
-from scipy.spatial import ConvexHull, Delaunay, KDTree, cKDTree
+from scipy.spatial import ConvexHull, Delaunay, KDTree, cKDTree, Voronoi
+from scipy.optimize import linear_sum_assignment
 import alphashape
 from shapely.geometry import MultiPoint
 
@@ -88,43 +89,43 @@ def sparsify_points(points, grid_size):
     _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
     return points[unique_indices]
 
-def densify_points(points, semantics, grid_size, k=5):
-    """ 
-    Semantic-grounded points upsampling using K-nearest neighbor (KD-Tree)
+# def densify_points(points, semantics, grid_size, k=5):
+#     """ 
+#     Semantic-grounded points upsampling using K-nearest neighbor (KD-Tree)
 
-    Args: 
-        points: (N, 2) or (N, 3) array of coordinates
-        semantics: (N, 1) or (N,) array of semantic index
-        grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
-        k: number of neighbors used for semantic voting
+#     Args: 
+#         points: (N, 2) or (N, 3) array of coordinates
+#         semantics: (N, 1) or (N,) array of semantic index
+#         grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
+#         k: number of neighbors used for semantic voting
 
-    Outputs:
-        upsample_points: (M, D) array where M >= N
-        upsample_semantics: (M, 1) array of semantic labels
-    """
-    semantics = semantics.squeeze() # (N,)
-    # 1. Define the bounding box of the points
-    min_bound = np.min(points, axis=0)
-    max_bound = np.max(points, axis=0)
-    # 2. Create a dense grid of coordinates within that box
-    axes = [np.arange(min_b, max_b + grid_size, grid_size) 
-            for min_b, max_b in zip(min_bound, max_bound)]
-    grid_coords = np.stack(np.meshgrid(*axes), -1).reshape(-1, points.shape[1])
-    # 3. KDTree: find K nearest original points for each grid coordinate
-    tree = KDTree(points)
-    _, knn_idx = tree.query(grid_coords, k=k)
-    upsampled_points = grid_coords
-    # 4. Semantic voting among the K nearest neighbors
-    knn_labels = semantics[knn_idx]
-    if k == 1:
-        upsampled_semantics = knn_labels
-    else:
-        # majority vote
-        upsampled_semantics = np.apply_along_axis(
-            lambda x: np.bincount(x).argmax(), axis=1, arr=knn_labels
-        )
-    upsampled_semantics = upsampled_semantics.reshape(-1, 1) # (M,1)
-    return upsampled_points, upsampled_semantics
+#     Outputs:
+#         upsample_points: (M, D) array where M >= N
+#         upsample_semantics: (M, 1) array of semantic labels
+#     """
+#     semantics = semantics.squeeze() # (N,)
+#     # 1. Define the bounding box of the points
+#     min_bound = np.min(points, axis=0)
+#     max_bound = np.max(points, axis=0)
+#     # 2. Create a dense grid of coordinates within that box
+#     axes = [np.arange(min_b, max_b + grid_size, grid_size) 
+#             for min_b, max_b in zip(min_bound, max_bound)]
+#     grid_coords = np.stack(np.meshgrid(*axes), -1).reshape(-1, points.shape[1])
+#     # 3. KDTree: find K nearest original points for each grid coordinate
+#     tree = KDTree(points)
+#     _, knn_idx = tree.query(grid_coords, k=k)
+#     upsampled_points = grid_coords
+#     # 4. Semantic voting among the K nearest neighbors
+#     knn_labels = semantics[knn_idx]
+#     if k == 1:
+#         upsampled_semantics = knn_labels
+#     else:
+#         # majority vote
+#         upsampled_semantics = np.apply_along_axis(
+#             lambda x: np.bincount(x).argmax(), axis=1, arr=knn_labels
+#         )
+#     upsampled_semantics = upsampled_semantics.reshape(-1, 1) # (M,1)
+#     return upsampled_points, upsampled_semantics
 
 
 # def transform_point_density(points, semantics, grid_size):
@@ -149,6 +150,55 @@ def densify_points(points, semantics, grid_size, k=5):
 #     upsampled_semantics = semantics[unique_indices]
 
 #     return upsampled_points, upsampled_semantics
+
+def voronoi_based_road_boundary(
+        pts_driv_candidates, 
+        pts_nodriv_candidates,
+    ):
+    """ 
+        Extract true boundary points between drivable and nondrivable points
+        using Voronoi Diagram. One-to-one matching only.
+
+        Args:
+            pts_driv_candidates: candidate boundary drivable points
+            pts_nodriv_candidates: candidate boundary non-drivable points
+        Outputs:
+            pts_boundary: true non-drivable boundary points
+    """
+    offset = len(pts_driv_candidates)
+    all_pts = np.vstack([pts_driv_candidates, pts_nodriv_candidates])
+    voronoi_diagram = Voronoi(all_pts)  
+    
+    # 1. Store distances for all valid Voronoi ridges (driv <-> nodriv)
+    # Use a dictionary to keep the cost matrix sparse
+    ridge_costs = {} 
+    for p1, p2 in voronoi_diagram.ridge_points:
+        is_p1_driv, is_p2_driv = p1 < offset, p2 < offset
+        if is_p1_driv != is_p2_driv:
+            d_idx = p1 if is_p1_driv else p2
+            n_idx = (p2 if is_p1_driv else p1) - offset
+            ridge_costs[(d_idx, n_idx)] = np.linalg.norm(all_pts[p1] - all_pts[p2])
+
+    if not ridge_costs: return np.array([])
+
+    # 2. Build cost matrix for the assignment problem
+    d_indices, n_indices = zip(*ridge_costs.keys())
+    d_unique, n_unique = np.unique(d_indices), np.unique(n_indices)
+    # Map original indices to matrix row/col indices
+    d_map = {idx: i for i, idx in enumerate(d_unique)}
+    n_map = {idx: i for i, idx in enumerate(n_unique)}
+    cost_matrix = np.full((len(d_unique), len(n_unique)), np.inf)
+    for (d, n), dist in ridge_costs.items():
+        cost_matrix[d_map[d], n_map[n]] = dist
+
+    # 3. Solve for one-to-one matching
+    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+    
+    # 4. Filter out non-existent Voronoi edges (inf) and return matches
+    valid = cost_matrix[row_ind, col_ind] != np.inf
+    true_nodriv_indices = n_unique[col_ind[valid]]
+    
+    return pts_nodriv_candidates[true_nodriv_indices]
 
 
 def vectorize_convex_crosswalk(points, semantics):
@@ -260,13 +310,6 @@ def vectorize_drivable_boundaries(points, semantics):
             polylines: polyline of drivable boundaries
     """
     polylines = []
-    # ===============================================
-    # (0) Point densification at sparse areas
-    #   proper nearest-neighbor-based boundary matching
-    # ===============================================
-    # points, semantics = transform_point_density(points, semantics, grid_size=cfg_bev.grid_size)
-    # points, semantics = densify_points(points, semantics, grid_size=cfg_bev.max_dist_nn_phase1)
-
     # ===========================
     # 3D points of drivable areas (road + lane marking + crosswalk)
     indexes_drivable = semantics[:,0] == road_class_idx
@@ -290,26 +333,46 @@ def vectorize_drivable_boundaries(points, semantics):
     pts_nondrivable = sparsify_points(pts_nondrivable, grid_size=cfg_bev.grid_size)
 
     # ===============================================
-    # (3) Search nondrivable points boundary to drivable points
+    # (3) Search candidate boundary points
+    #   =>  all non-drivable pts and 
+    #       associated k-nearest-drivable pts
     # ===============================================
-    # nn = NearestNeighbors(n_neighbors=1).fit(pts_drivable)
-    # dist, _ = nn.kneighbors(pts_nondrivable)
-    # pts_boundary = pts_nondrivable[dist.flatten() <= cfg_bev.max_dist_nn_phase1]
-    
-    pts_boundary = []
-    # Convert (M,2) -> (M,3) once: [X,Z] to [X,Y,Z]
-    pts_drivable_3d = np.insert(pts_drivable, 1, 0.0, axis=1)
-    pts_nondrivable_3d = np.insert(pts_nondrivable, 1, 0.0, axis=1)
-    # Construct KDTree on drivable points
-    tree = cKDTree(pts_drivable_3d)
-    # Search boundary points based on k-nearest drivable neighbor
-    dists, neighbors = tree.query(pts_nondrivable_3d, k=cfg_bev.k)
-    # print(dists.shape) # (N_nondrivable, k)
+    nn = NearestNeighbors(n_neighbors=1).fit(pts_drivable)
+    dists, neighbors = nn.kneighbors(pts_nondrivable) 
     # Constrain max nearest neighbor distance
-    mask_boundary = np.any(dists <= cfg_bev.max_dist_nn_phase1, axis=1)
-    pts_boundary = pts_nondrivable[mask_boundary]
+    mask_boundary = np.any(dists <= cfg_bev.max_dist_boundary, axis=1)
+    # candidate boundary (nondrivable pts)
+    pts_nodriv_boundary = pts_nondrivable[mask_boundary] 
+    # candidate boundary (drivable pts)
+    pts_driv_boundary = pts_drivable[neighbors[dists <= cfg_bev.max_dist_boundary]]
+    # print(pts_nodriv_boundary.shape, pts_driv_boundary.shape)
+    pts_boundary = pts_nodriv_boundary
     
-    # polylines.append(pts_boundary)
+    # # Convert (M,2) -> (M,3) once: [X,Z] to [X,Y,Z]
+    # pts_drivable_3d = np.insert(pts_drivable, 1, 0.0, axis=1)
+    # pts_nondrivable_3d = np.insert(pts_nondrivable, 1, 0.0, axis=1)
+    # # Construct KDTree on drivable points
+    # tree = cKDTree(pts_drivable_3d)
+    # # Search boundary points based on k-nearest drivable neighbor
+    # dists, neighbors = tree.query(pts_nondrivable_3d, k=cfg_bev.k)
+    # # print(dists.shape) # (N_nondrivable, k)
+    # # Constrain max nearest neighbor distance
+    # mask_boundary = np.any(dists <= cfg_bev.max_dist_boundary, axis=1)
+    # # candidate boundary (nondrivable pts)
+    # pts_nodriv_boundary = pts_nondrivable[mask_boundary] 
+    # # candidate boundary (drivable pts)
+    # pts_driv_boundary = pts_drivable[neighbors[dists <= cfg_bev.max_dist_boundary]]
+    # # print(pts_nodriv_boundary.shape, pts_driv_boundary.shape)
+    # pts_boundary = pts_nodriv_boundary
+
+
+    # ===============================================
+    # (4) Voronoi-based true boundary filtering
+    # ===============================================
+    pts_boundary = voronoi_based_road_boundary(
+        pts_driv_candidates=pts_driv_boundary,
+        pts_nodriv_candidates=pts_nodriv_boundary,
+    )
     
     # ===============================================
     # (4) Cluster points boundary points into polylines
@@ -375,7 +438,6 @@ def visualize_map(polylines_dict, output_path):
                 #     linewidth=2, label=label if i == 0 else "")
                 plt.scatter(poly[:, 0], poly[:, 1], color=color, s=10)
 
-    plt.axis('equal') # Maintain real-world proportions
     plt.xlim(cfg_bev.xlim) # lateral
     plt.ylim(cfg_bev.zlim) # forward 
     plt.xlabel('X [m]', fontsize=12)
@@ -384,5 +446,6 @@ def visualize_map(polylines_dict, output_path):
     # plt.title('Vectorized BEV Map', fontsize=16)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
+    plt.axis('equal') # Maintain real-world proportions
     # plt.show()
     plt.savefig(os.path.join(output_path, 'map_polylines.png'), bbox_inches='tight')
