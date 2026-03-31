@@ -43,13 +43,14 @@ generator_sem2d = Semantic2DGenerator(threshold=cfg_bev.SEG_THRESHOLD)
 generator_3d = PointCloud3DGenerator()
 
 """ TODO: list of img paths"""
-img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_2/n008-2018-05-21-11-06-59-0400__CAM_FRONT__1526915292912465.jpg'
+img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_8/sample_nuscene_87.png'
 vis_path = f'{pwd}/debug_outputs/img2sem3d/' # None: no output
 
 img = Image.open(img_path)
 ##############################################
 # (1a) occlusion masking
 ##############################################
+start_total = time.time()
 start = time.time()
 occ_masks = generator_sem2d.generate_2Dsem(
     img, semantic_classes=cfg_bev.OCCLUSION_CLASSES
@@ -69,9 +70,10 @@ masks = [occ_mask]
 occ_free_images = generator_clear.clear_2d_occlusion(images, masks)
 img = occ_free_images[0]
 # save occlusion-free image to tmp dir
-os.makedirs(f'{pwd}/tmp/', exist_ok=True)
+tmp_dir = f'{pwd}/../../tmp/'
+os.makedirs(tmp_dir, exist_ok=True)
 unique = uuid.uuid4().hex
-path_img_clear = os.path.join(f'{pwd}/tmp/', f"{unique}.jpg")
+path_img_clear = os.path.join(tmp_dir, f"{unique}.jpg")
 img.save(path_img_clear) # temp
 end = time.time()
 print(colored(f'Diffusion: {round(end-start, 3)} s', 'green'))
@@ -121,6 +123,8 @@ pc_grid, sem_grid, valid_indexes = img_reconstruct_3D_points(
 # extract points of interest
 points = pc_grid.reshape(-1,3)[valid_indexes]
 semantics = sem_grid.reshape(-1,1)[valid_indexes]
+end_total = time.time()
+print(colored(f'Total E2E: {end_total-start_total} s.', 'green'))
 
 # visualization
 if vis_path is not None:
