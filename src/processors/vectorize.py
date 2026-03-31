@@ -531,9 +531,9 @@ def visualize_map(polylines_dict, output_path):
                 plt.scatter(closed_poly[:, 0], closed_poly[:, 1], color=color, s=10)
                 plt.fill(closed_poly[:, 0], closed_poly[:, 1], color=color, alpha=0.3)
             else:
-                # # plot other points as sequence of points
-                # plt.plot(poly[:, 0], poly[:, 1], color=color, 
-                #     linewidth=2, label=label if i == 0 else "")
+                # plot other points as sequence of points
+                plt.plot(poly[:, 0], poly[:, 1], color=color, 
+                    linewidth=2, label=label if i == 0 else "")
                 plt.scatter(poly[:, 0], poly[:, 1], color=color, s=10)
 
     plt.xlim(cfg_bev.xlim) # lateral
