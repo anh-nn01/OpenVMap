@@ -88,117 +88,214 @@ def sparsify_points(points, grid_size):
     # 2. Find unique grid cells. return_index=True gives the first point in each cell.
     _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
     return points[unique_indices]
+    
 
-# def densify_points(points, semantics, grid_size, k=5):
+
+# def voronoi_based_road_boundary(
+#         pts_driv_candidates, 
+#         pts_nodriv_candidates,
+#     ):
 #     """ 
-#     Semantic-grounded points upsampling using K-nearest neighbor (KD-Tree)
+#         Extract true boundary points between drivable and nondrivable points
+#         using Voronoi Diagram. One-to-one matching only.
 
-#     Args: 
-#         points: (N, 2) or (N, 3) array of coordinates
-#         semantics: (N, 1) or (N,) array of semantic index
-#         grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
-#         k: number of neighbors used for semantic voting
-
-#     Outputs:
-#         upsample_points: (M, D) array where M >= N
-#         upsample_semantics: (M, 1) array of semantic labels
+#         Args:
+#             pts_driv_candidates: candidate boundary drivable points
+#             pts_nodriv_candidates: candidate boundary non-drivable points
+#         Outputs:
+#             pts_boundary: true non-drivable boundary points
 #     """
-#     semantics = semantics.squeeze() # (N,)
-#     # 1. Define the bounding box of the points
-#     min_bound = np.min(points, axis=0)
-#     max_bound = np.max(points, axis=0)
-#     # 2. Create a dense grid of coordinates within that box
-#     axes = [np.arange(min_b, max_b + grid_size, grid_size) 
-#             for min_b, max_b in zip(min_bound, max_bound)]
-#     grid_coords = np.stack(np.meshgrid(*axes), -1).reshape(-1, points.shape[1])
-#     # 3. KDTree: find K nearest original points for each grid coordinate
-#     tree = KDTree(points)
-#     _, knn_idx = tree.query(grid_coords, k=k)
-#     upsampled_points = grid_coords
-#     # 4. Semantic voting among the K nearest neighbors
-#     knn_labels = semantics[knn_idx]
-#     if k == 1:
-#         upsampled_semantics = knn_labels
-#     else:
-#         # majority vote
-#         upsampled_semantics = np.apply_along_axis(
-#             lambda x: np.bincount(x).argmax(), axis=1, arr=knn_labels
-#         )
-#     upsampled_semantics = upsampled_semantics.reshape(-1, 1) # (M,1)
-#     return upsampled_points, upsampled_semantics
+#     offset = len(pts_driv_candidates)
+#     all_pts = np.vstack([pts_driv_candidates, pts_nodriv_candidates])
+#     voronoi_diagram = Voronoi(all_pts)  
+    
+#     # 1. Store distances for all valid Voronoi ridges (driv <-> nodriv)
+#     # Use a dictionary to keep the cost matrix sparse
+#     ridge_costs = {} 
+#     for p1, p2 in voronoi_diagram.ridge_points:
+#         is_p1_driv, is_p2_driv = p1 < offset, p2 < offset
+#         if is_p1_driv != is_p2_driv:
+#             d_idx = p1 if is_p1_driv else p2
+#             n_idx = (p2 if is_p1_driv else p1) - offset
+#             ridge_costs[(d_idx, n_idx)] = np.linalg.norm(all_pts[p1] - all_pts[p2])
+
+#     if not ridge_costs: return np.array([])
+
+#     # 2. Build cost matrix for the assignment problem
+#     d_indices, n_indices = zip(*ridge_costs.keys())
+#     d_unique, n_unique = np.unique(d_indices), np.unique(n_indices)
+#     # Map original indices to matrix row/col indices
+#     d_map = {idx: i for i, idx in enumerate(d_unique)}
+#     n_map = {idx: i for i, idx in enumerate(n_unique)}
+#     cost_matrix = np.full((len(d_unique), len(n_unique)), np.inf)
+#     for (d, n), dist in ridge_costs.items():
+#         cost_matrix[d_map[d], n_map[n]] = dist
+        
+#     # # 3. Solve for one-to-one matching
+#     # row_ind, col_ind = linear_sum_assignment(cost_matrix)
+#     # # 4. Filter out non-existent Voronoi edges (inf) and return matches
+#     # valid = cost_matrix[row_ind, col_ind] != np.inf
+#     # true_nodriv_indices = n_unique[col_ind[valid]]
+
+#     # Voronoi extraction
+#     true_nodriv_indices = np.unique([n for (_, n) in ridge_costs.keys()])
+#     pts_boundary_candidates = pts_nodriv_candidates[true_nodriv_indices]
+    
+#     return pts_nodriv_candidates
 
 
-# def transform_point_density(points, semantics, grid_size):
-#     """ 
-#     Semantic-grounded point density transformation using nearest neighbor
 
-#     Args: 
-#         points: (N, 2) or (N, 3) array of coordinates
-#         semantics: (N, 1) array of semantic index
-#         grid_size: float, the size of each grid cell (e.g., 0.1 for 10cm)
-#     Outputs:
-#         upsample_points: (M, D)
-#     """
-#     # 1. Snap points to the nearest grid center
-#     # Adding 0.5 ensures we snap to the middle of the cell, not the corner
-#     grid_indices = np.round(points / grid_size)
-#     grid_centers = grid_indices * grid_size
-#     # 2. Find unique grid centers to ensure uniform density (one point per cell)
-#     # return_index=True picks the nearest original semantic label for that cell
-#     _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
-#     upsampled_points = grid_centers[unique_indices]
-#     upsampled_semantics = semantics[unique_indices]
+def adaptive_LGAF(pts, k_neighbors=15, min_ratio=0.15, max_dist_mult=2.0):
+    """
+    Adaptive Local Geometric Anisotropy Filtering; 
+    filter elongated/thin point areas with density awareness for sparse distant points
+    
+    Args:
+        pts: (N, 2) array of [X, Z] points.
+        k_neighbors: Number of neighbors to check (higher = more stable).
+        min_ratio: How 'thick' a shape must be.
+        max_dist_mult: Safety check. If neighbors are too far apart for the 
+                       current range, it's likely noise.
+    """
+    tree = cKDTree(pts)
+    
+    # 1. Query the K nearest neighbors for every point
+    # distances: distance to each neighbor, indices: indices of neighbors
+    distances, indices = tree.query(pts, k=k_neighbors)
+    mask = np.zeros(len(pts), dtype=bool)
+    
+    # Calculate distance from sensor (origin) for each point
+    # This helps us understand the expected sparsity
+    ranges = np.linalg.norm(pts, axis=1)
 
-#     return upsampled_points, upsampled_semantics
+    for i in range(len(pts)):
+        # 2. Sparsity Check
+        # At further ranges, we expect points to be further apart.
+        # We calculate a 'typical' spacing for this distance.
+        avg_neighbor_dist = np.mean(distances[i, 1:])
+        expected_spacing = (ranges[i] * 0.05) # Assume 5% angular spread as a rule of thumb
+        
+        # If the neighbors are ridiculously far away even for this range, skip it
+        if avg_neighbor_dist > expected_spacing * max_dist_mult:
+            continue
+
+        # 3. Geometric Shape Analysis (PCA)
+        neighbor_pts = pts[indices[i]]
+        cov = np.cov(neighbor_pts.T)
+        evals = np.linalg.eigvalsh(cov)
+        
+        # thickness_ratio = width / length
+        ratio = np.sqrt(evals[0] / (evals[1] + 1e-6))
+        
+        # 4. Adaptive Threshold
+        # We can be slightly less strict at a distance 
+        # because sampling patterns can make thick things look thin.
+        adaptive_tau = min_ratio * (1.0 - (ranges[i] / 100.0)) 
+        adaptive_tau = max(adaptive_tau, 0.05) # min threshold: 0.05
+        if ratio > adaptive_tau:
+            mask[i] = True
+            
+    return pts[mask]
+
+
 
 def voronoi_based_road_boundary(
-        pts_driv_candidates, 
-        pts_nodriv_candidates,
-    ):
-    """ 
-        Extract true boundary points between drivable and nondrivable points
-        using Voronoi Diagram. One-to-one matching only.
-
-        Args:
-            pts_driv_candidates: candidate boundary drivable points
-            pts_nodriv_candidates: candidate boundary non-drivable points
-        Outputs:
-            pts_boundary: true non-drivable boundary points
+    pts_driv_candidates,
+    pts_nodriv_candidates,
+    k=2,
+    max_dist=None,
+):
     """
+    Extract non-drivable boundary candidates using Voronoi adjacency.
+    For each drivable point, keep k closest Voronoi-adjacent non-drivable points.
+
+    Args:
+        pts_driv_candidates:   (N_d, 2)
+        pts_nodriv_candidates: (N_n, 2)
+        k: number of closest neighbors per drivable point
+        max_dist: optional distance threshold (reject far pairs)
+    Outputs:
+        pts_boundary_candidates: (N_b, 2)
+    """
+    pts_driv_candidates = np.asarray(pts_driv_candidates, dtype=float)
+    pts_nodriv_candidates = np.asarray(pts_nodriv_candidates, dtype=float)
+
+    if len(pts_driv_candidates) == 0 or len(pts_nodriv_candidates) == 0:
+        return np.empty((0, 2), dtype=float)
+
     offset = len(pts_driv_candidates)
     all_pts = np.vstack([pts_driv_candidates, pts_nodriv_candidates])
-    voronoi_diagram = Voronoi(all_pts)  
-    
-    # 1. Store distances for all valid Voronoi ridges (driv <-> nodriv)
-    # Use a dictionary to keep the cost matrix sparse
-    ridge_costs = {} 
-    for p1, p2 in voronoi_diagram.ridge_points:
-        is_p1_driv, is_p2_driv = p1 < offset, p2 < offset
-        if is_p1_driv != is_p2_driv:
-            d_idx = p1 if is_p1_driv else p2
-            n_idx = (p2 if is_p1_driv else p1) - offset
-            ridge_costs[(d_idx, n_idx)] = np.linalg.norm(all_pts[p1] - all_pts[p2])
 
-    if not ridge_costs: return np.array([])
+    vor = Voronoi(all_pts)
 
-    # 2. Build cost matrix for the assignment problem
-    d_indices, n_indices = zip(*ridge_costs.keys())
-    d_unique, n_unique = np.unique(d_indices), np.unique(n_indices)
-    # Map original indices to matrix row/col indices
-    d_map = {idx: i for i, idx in enumerate(d_unique)}
-    n_map = {idx: i for i, idx in enumerate(n_unique)}
-    cost_matrix = np.full((len(d_unique), len(n_unique)), np.inf)
-    for (d, n), dist in ridge_costs.items():
-        cost_matrix[d_map[d], n_map[n]] = dist
+    # collect candidates per drivable point
+    neigh = {}  # d_idx -> list of (dist, n_idx)
+    for p1, p2 in vor.ridge_points:
+        is_p1_driv = p1 < offset
+        is_p2_driv = p2 < offset
 
-    # 3. Solve for one-to-one matching
-    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        if is_p1_driv == is_p2_driv:
+            continue
+
+        d_idx = p1 if is_p1_driv else p2
+        n_idx = (p2 if is_p1_driv else p1) - offset
+        dist = np.linalg.norm(all_pts[p1] - all_pts[p2])
+
+        if max_dist is not None and dist > max_dist:
+            continue
+        if d_idx not in neigh:
+            neigh[d_idx] = []
+        neigh[d_idx].append((dist, n_idx))
+
+    if not neigh:
+        return np.empty((0, 2), dtype=float)
+
+    selected_nodriv = set()
+    for d_idx, lst in neigh.items():
+        lst_sorted = sorted(lst, key=lambda x: x[0])
+        for dist, n_idx in lst_sorted[:k]:
+            selected_nodriv.add(n_idx)
+
+    selected_nodriv = np.array(sorted(selected_nodriv), dtype=int)
+    pts_boundary_candidates = pts_nodriv_candidates[selected_nodriv]
+
+    return pts_boundary_candidates
+
+
+
+def order_points(points):
+    """
+        Order set pts for polyline visualization
+    """
+    points = np.array(points)
+    n = len(points)
+    if n <= 1:
+        return points
+
+    # 1. Find an "extreme" point to start (approximate diameter)
+    # Start at index 0, find the point furthest from it
+    dist_from_start = np.sum((points - points[0])**2, axis=1)
+    start_idx = np.argmax(dist_from_start)
     
-    # 4. Filter out non-existent Voronoi edges (inf) and return matches
-    valid = cost_matrix[row_ind, col_ind] != np.inf
-    true_nodriv_indices = n_unique[col_ind[valid]]
-    
-    return pts_nodriv_candidates[true_nodriv_indices]
+    # Initialize the ordered list with the first point
+    ordered_indices = [start_idx]
+    # Use a boolean mask to keep track of unvisited points
+    mask = np.ones(n, dtype=bool)
+    mask[0] = False
+    for _ in range(n - 1):
+        last_pt = points[ordered_indices[-1]]
+        # Calculate squared Euclidean distance to all unvisited points at once
+        # (Using squared distance is faster as it avoids the square root)
+        unvisited_points = points[mask]
+        unvisited_indices = np.where(mask)[0]
+        distances = np.sum((unvisited_points - last_pt)**2, axis=1)
+        # Find the index of the closest point and update the order/mask
+        next_local_idx = np.argmin(distances)
+        next_global_idx = unvisited_indices[next_local_idx]
+        ordered_indices.append(next_global_idx)
+        mask[next_global_idx] = False
+        
+    return points[ordered_indices]
 
 
 def vectorize_convex_crosswalk(points, semantics):
@@ -322,7 +419,7 @@ def vectorize_drivable_boundaries(points, semantics):
     # (1) Extract drivable and nondrivable points
     # ===============================================
     # Project to a single height plane (Y-axis)
-    points[:,1] = 0. # any constant => only care about X and Z
+    # points[:,1] = 0. # any constant => only care about X and Z
     pts_drivable, pts_nondrivable = points[indexes_drivable], points[indexes_nondrivable]
     pts_drivable = pts_drivable[:,[0,2]] # X-axis and Z-axis
     pts_nondrivable = pts_nondrivable[:,[0,2]] # X-axis and Z-axis
@@ -337,38 +434,38 @@ def vectorize_drivable_boundaries(points, semantics):
     #   =>  all non-drivable pts and 
     #       associated k-nearest-drivable pts
     # ===============================================
-    nn = NearestNeighbors(n_neighbors=1).fit(pts_drivable)
-    dists, neighbors = nn.kneighbors(pts_nondrivable) 
+    nn1 = NearestNeighbors(n_neighbors=1).fit(pts_drivable) # fit on drivable points
+    # nn2 = NearestNeighbors(n_neighbors=1).fit(pts_nondrivable) # fit on nondrivable points
+    dists_1, neighbors_1 = nn1.kneighbors(pts_nondrivable) 
+    # dists_2, neighbors_2 = nn2.kneighbors(pts_drivable) 
+
     # Constrain max nearest neighbor distance
-    mask_boundary = np.any(dists <= cfg_bev.max_dist_boundary, axis=1)
+    mask_nondriv_boundary = np.any(dists_1 <= cfg_bev.max_dist_boundary, axis=1)
+    # mask_driv_boundary = np.any(dists_2 <= cfg_bev.max_dist_boundary, axis=1)
+
     # candidate boundary (nondrivable pts)
-    pts_nodriv_boundary = pts_nondrivable[mask_boundary] 
+    pts_nodriv_boundary = pts_nondrivable[mask_nondriv_boundary] 
     # candidate boundary (drivable pts)
-    pts_driv_boundary = pts_drivable[neighbors[dists <= cfg_bev.max_dist_boundary]]
+    pts_driv_boundary = pts_drivable # pts_drivable[mask_driv_boundary]
     # print(pts_nodriv_boundary.shape, pts_driv_boundary.shape)
-    pts_boundary = pts_nodriv_boundary
-    
-    # # Convert (M,2) -> (M,3) once: [X,Z] to [X,Y,Z]
-    # pts_drivable_3d = np.insert(pts_drivable, 1, 0.0, axis=1)
-    # pts_nondrivable_3d = np.insert(pts_nondrivable, 1, 0.0, axis=1)
-    # # Construct KDTree on drivable points
-    # tree = cKDTree(pts_drivable_3d)
-    # # Search boundary points based on k-nearest drivable neighbor
-    # dists, neighbors = tree.query(pts_nondrivable_3d, k=cfg_bev.k)
-    # # print(dists.shape) # (N_nondrivable, k)
-    # # Constrain max nearest neighbor distance
-    # mask_boundary = np.any(dists <= cfg_bev.max_dist_boundary, axis=1)
-    # # candidate boundary (nondrivable pts)
-    # pts_nodriv_boundary = pts_nondrivable[mask_boundary] 
-    # # candidate boundary (drivable pts)
-    # pts_driv_boundary = pts_drivable[neighbors[dists <= cfg_bev.max_dist_boundary]]
-    # # print(pts_nodriv_boundary.shape, pts_driv_boundary.shape)
+
+    # ===============================================
+    # (4) Adaptive Local Geometric Anisotropy Filtering: 
+    #     Filter "thin" regions caused by semantic inaccuracies
+    # ===============================================
+    pts_nodriv_boundary = adaptive_LGAF(
+        pts_nodriv_boundary, 
+        k_neighbors=cfg_bev.lgaf_neigbors,
+        min_ratio=cfg_bev.lgaf_min_ratio, 
+        max_dist_mult=cfg_bev.lgaf_max_radius,
+    )
+
+
+    # ===============================================
+    # (5) Voronoi-based true boundary filtering
+    # ===============================================
     # pts_boundary = pts_nodriv_boundary
-
-
-    # ===============================================
-    # (4) Voronoi-based true boundary filtering
-    # ===============================================
+    # pts_boundary = pts_driv_boundary
     pts_boundary = voronoi_based_road_boundary(
         pts_driv_candidates=pts_driv_boundary,
         pts_nodriv_candidates=pts_nodriv_boundary,
@@ -386,6 +483,7 @@ def vectorize_drivable_boundaries(points, semantics):
     for label in set(poly_groups):
         if label == -1: continue
         cluster_points = pts_boundary[poly_groups == label]
+        cluster_points = order_points(cluster_points)
         polylines.append(cluster_points)
 
         # # ===============================================
@@ -442,10 +540,11 @@ def visualize_map(polylines_dict, output_path):
     plt.ylim(cfg_bev.zlim) # forward 
     plt.xlabel('X [m]', fontsize=12)
     plt.ylabel('Z [m]', fontsize=12)
-    plt.gca().invert_xaxis() # flip x axis: 3D points x-direction points to the left
+    ax = plt.gca()
+    ax.invert_xaxis() # flip x axis: 3D points x-direction points to the left
+    ax.set_aspect('equal', adjustable='box') 
     # plt.title('Vectorized BEV Map', fontsize=16)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.axis('equal') # Maintain real-world proportions
     # plt.show()
     plt.savefig(os.path.join(output_path, 'map_polylines.png'), bbox_inches='tight')

@@ -415,7 +415,7 @@ if __name__ == '__main__': # for demo purposes
 
     
     output_path = 'debug_outputs/occfree/'
-    eg_id = 8
+    eg_id = 6
     path_img = f'../examples/nusc/img_{eg_id}/img_occlusion_free.jpg'
     path_masks = f'{pwd}/../examples/nusc/img_{eg_id}/semantic_masks.npz'
     path_intrinsic =  f'{pwd}/../examples/nusc/img_{eg_id}/da3_output_occfree/intrinsics.npy'
