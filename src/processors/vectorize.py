@@ -88,6 +88,43 @@ def sparsify_points(points, grid_size):
     # 2. Find unique grid cells. return_index=True gives the first point in each cell.
     _, unique_indices = np.unique(grid_indices, axis=0, return_index=True)
     return points[unique_indices]
+
+
+
+def deocclude(pts_drivable, pts_nondrivable, grid_size=0.1, kernel_size=5):
+        # 1. Map points to a 2D BEV Grid
+        def to_grid(pts):
+            # Maps (x, y) to integer grid indices
+            return np.floor((pts - min_coords) / grid_size).astype(int)
+        all_pts = np.concatenate([pts_drivable, pts_nondrivable], axis=0)
+        min_coords = all_pts.min(axis=0)
+        d_indices = to_grid(pts_drivable) # drivable points
+        
+        # 2. Create Binary Occupancy Map
+        max_coords = all_pts.max(axis=0)
+        width, height = (np.ceil((max_coords - min_coords) / grid_size).astype(int)) + 2
+        road_mask = np.zeros((width, height), dtype=np.uint8)
+        road_mask[d_indices[:, 0], d_indices[:, 1]] = 1
+        # 3. Morphological Closing (Fills the black gaps/wedges between scan lines)
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        filled_mask = cv2.morphologyEx(road_mask, cv2.MORPH_CLOSE, kernel)
+
+        # 4. Filter pts_nondrivable (Remove noise inside the filled road area)
+        nd_indices = to_grid(pts_nondrivable) # non-drivable points
+        # Ensure indices are within bounds of the mask
+        nd_indices[:, 0] = np.clip(nd_indices[:, 0], 0, width - 1)
+        nd_indices[:, 1] = np.clip(nd_indices[:, 1], 0, height - 1)
+        # Keep nondrivable points ONLY if they are NOT in the filled road mask (0)
+        is_not_noise = filled_mask[nd_indices[:, 0], nd_indices[:, 1]] == 0
+        clean_nondrivable = pts_nondrivable[is_not_noise]
+
+        # 5. Synthesize 'filled' drivable points => target empty pts
+        filled_pixels = np.argwhere((filled_mask == 1) & (road_mask == 0))
+        # Convert pixel indices back to world coordinates (x, y)
+        new_pts = (filled_pixels * grid_size) + min_coords
+        clean_drivable = np.concatenate([pts_drivable, new_pts], axis=0)
+
+        return clean_drivable, clean_nondrivable
     
 
 
@@ -153,7 +190,7 @@ def adaptive_LGAF(pts, k_neighbors=15, min_ratio=0.15, max_dist_mult=2.0):
     Args:
         pts: (N, 2) array of [X, Z] points.
         k_neighbors: Number of neighbors to check (higher = more stable).
-        min_ratio: How 'thick' a shape must be.
+        min_ratio: thickness threshold
         max_dist_mult: Safety check. If neighbors are too far apart for the 
                        current range, it's likely noise.
     """
@@ -170,12 +207,12 @@ def adaptive_LGAF(pts, k_neighbors=15, min_ratio=0.15, max_dist_mult=2.0):
 
     for i in range(len(pts)):
         # 2. Sparsity Check
-        # At further ranges, we expect points to be further apart.
-        # We calculate a 'typical' spacing for this distance.
+        # Points are sparser at further ranges.
+        # => Adaptive distance-based density
         avg_neighbor_dist = np.mean(distances[i, 1:])
         expected_spacing = (ranges[i] * 0.05) # Assume 5% angular spread as a rule of thumb
         
-        # If the neighbors are ridiculously far away even for this range, skip it
+        # If the neighbors are abnormally far apart even for this range, skip it
         if avg_neighbor_dist > expected_spacing * max_dist_mult:
             continue
 
@@ -196,6 +233,7 @@ def adaptive_LGAF(pts, k_neighbors=15, min_ratio=0.15, max_dist_mult=2.0):
             mask[i] = True
             
     return pts[mask]
+
 
 
 
@@ -423,8 +461,16 @@ def vectorize_drivable_boundaries(points, semantics):
     pts_drivable, pts_nondrivable = points[indexes_drivable], points[indexes_nondrivable]
     pts_drivable = pts_drivable[:,[0,2]] # X-axis and Z-axis
     pts_nondrivable = pts_nondrivable[:,[0,2]] # X-axis and Z-axis
+    
     # ===============================================
-    # (2) Point Sparsification at dense areas for speed up
+    # (2) Fill occlusions
+    # ===============================================
+    pts_drivable, pts_nondrivable = deocclude(
+        pts_drivable, pts_nondrivable, grid_size=cfg_bev.grid_size,
+    )
+    
+    # ===============================================
+    # (3) Point Sparsification at dense areas for speed up
     # ===============================================
     pts_drivable = sparsify_points(pts_drivable, grid_size=cfg_bev.grid_size)
     pts_nondrivable = sparsify_points(pts_nondrivable, grid_size=cfg_bev.grid_size)

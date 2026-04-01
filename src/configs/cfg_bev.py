@@ -51,7 +51,7 @@ lgaf_max_radius = 2.0  # [meters] local radius for thin regions filtering
 lgaf_min_ratio = 0.2  # ratio of points for thin region identification
 
 # total points in valid boundary polylines
-min_points_poly_boundary = 3 
+min_points_poly_boundary = 10 
 
 
 # k = 2 # k nearest neighbor (KDTree) for boundary identification
