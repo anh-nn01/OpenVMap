@@ -10,7 +10,8 @@ SEMANTIC_CLASSES = [
 	# dynamic objects / obstacles
 	# "vehicle", "pedestrian", "pole",
 ]
-SEG_THRESHOLD = 0.5 # Semantic threshold
+SEG_THRESHOLD = 0.3 # Semantic threshold
+DIFFUSION_STEPS = 7 # diffusion steps for occlusion clearance
 
 debug = True # debug mode: save intermediate outputs
 

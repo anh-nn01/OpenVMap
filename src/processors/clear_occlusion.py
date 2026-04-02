@@ -19,6 +19,7 @@ import numpy as np
 
 from generate_semantics import Semantic2DGenerator
 sys.path.append(f"{pwd}/../configs")
+import cfg_bev
 from cfg_bev import OCCLUSION_CLASSES, SEG_THRESHOLD
 
 import time
@@ -111,7 +112,7 @@ if __name__ == "__main__":
     image = Image.open(args.img_path).convert("RGB")
     
     # 1. initialize occlusion free image generator
-    generator_clear = OcclusionFreeGenerator()
+    generator_clear = OcclusionFreeGenerator(steps=cfg_bev.DIFFUSION_STEPS)
     # 2. initialize occlusion mask generator
     generator_sam3 = Semantic2DGenerator(threshold=SEG_THRESHOLD)
     # 3. occlusion masking

@@ -38,12 +38,14 @@ from generate_bev_grid import img_reconstruct_3D_points, visualize_outputs
 
 
 # Initialize generators
-generator_clear = OcclusionFreeGenerator(steps=15) # diffusion steps
+generator_clear = OcclusionFreeGenerator(steps=cfg_bev.DIFFUSION_STEPS) # diffusion steps
 generator_sem2d = Semantic2DGenerator(threshold=cfg_bev.SEG_THRESHOLD)
 generator_3d = PointCloud3DGenerator()
 
 """ TODO: list of img paths"""
-img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_8/sample_nuscene_87.png'
+# img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_6/sample_nuscene_87.png'
+# img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_7/n008-2018-08-28-16-43-51-0400__CAM_FRONT__1535489311362404.jpg'
+img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_9/000000.jpg'
 vis_path = f'{pwd}/debug_outputs/img2sem3d/' # None: no output
 
 img = Image.open(img_path)
