@@ -12,6 +12,8 @@ SEMANTIC_CLASSES = [
 ]
 SEG_THRESHOLD = 0.5 # Semantic threshold
 
+debug = True # debug mode: save intermediate outputs
+
 # valid class index +=1 (0 = unknown class)
 road_class_idx = SEMANTIC_CLASSES.index('road')+1 # 'drivable road area'
 lane_div_class_idx = SEMANTIC_CLASSES.index('lane divider')+1
@@ -21,7 +23,7 @@ crosswalk_class_idx = SEMANTIC_CLASSES.index('crosswalk area')+1
 ###################################
 # map BEV voxels [play with this]
 ###################################
-BEV_HEIGHT = 1.5 # height of interest above the ground level, in meters
+BEV_HEIGHT = 1.0 # height of interest above the ground level, in meters
 voxel_size = 0.2 # voxel size, in meter
 xlim = (-15,15) # lateral
 ylim = None # dynamically adjusted based on avg ground level / cam height
@@ -31,7 +33,7 @@ zlim = (0,30)  # depth
 # vectorization: crosswalk
 ###################################
 # [meters] 1 point per grid size: point sparsification for speed up
-grid_size = 0.2
+grid_size = 0.25
 # [meters] maximum distance to grouped in the same polyline
 eps_cluster = 2.5 
 # total points to be considered a valid set of polyline
@@ -49,6 +51,9 @@ max_dist_boundary = 2.0 # phase 1: for efficient boundary point search
 lgaf_neigbors = 20 	   # nearest neighbors
 lgaf_max_radius = 2.0  # [meters] local radius for thin regions filtering
 lgaf_min_ratio = 0.2  # ratio of points for thin region identification
+
+# Deocclusion (morphological closing)
+mc_kernel = 1.0 # [meters] kernel size for gap closing
 
 # total points in valid boundary polylines
 min_points_poly_boundary = 10 

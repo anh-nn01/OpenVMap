@@ -22,6 +22,7 @@ from scipy.spatial import ConvexHull, Delaunay, KDTree, cKDTree, Voronoi
 from scipy.optimize import linear_sum_assignment
 import alphashape
 from shapely.geometry import MultiPoint
+import trimesh
 
 # configs
 sys.path.append(f"{pwd}/../configs")
@@ -72,6 +73,26 @@ crosswalk_class_idx = cfg_bev.crosswalk_class_idx
 
 #     return polylines_dict
 
+def save_drivable_pts(pts_drivable, pts_nondrivable, filename="scene.glb"):
+    # Define colors in RGBA (0-255)
+    color_green = [0, 255, 0, 255]
+    color_silver = [192, 192, 192, 255]
+    # Create point cloud for drivable points
+    pc_drivable = trimesh.points.PointCloud(
+        vertices=pts_drivable, 
+        colors=[color_green] * len(pts_drivable)
+    )
+    # Create point cloud for non-drivable points
+    pc_nondrivable = trimesh.points.PointCloud(
+        vertices=pts_nondrivable, 
+        colors=[color_silver] * len(pts_nondrivable)
+    )
+    # Combine both into a single scene
+    scene = trimesh.Scene([pc_drivable, pc_nondrivable])
+    # Export to GLB
+    scene.export(filename)
+    print(f"File saved as {filename}")
+
 
 def sparsify_points(points, grid_size):
     """
@@ -91,7 +112,20 @@ def sparsify_points(points, grid_size):
 
 
 
-def deocclude(pts_drivable, pts_nondrivable, grid_size=0.1, kernel_size=5):
+def deocclude(pts_drivable, pts_nondrivable, grid_size=0.1, kernel_size=1.0):
+        """
+        Close occlusion shadow gaps + address noisy obstacle points
+        using morphological closing & noise removal in filled pts
+
+        Args:
+            pts_drivable: drivable points
+            pts_nondrivable: nondrivable points
+            grid_size: grid size for morphological closing
+            kernel_size: kernel size (meters) for morphological closing
+        Outputs:
+            clean_drivable, clean_nondrivable
+        """
+        kernel_size = int(kernel_size / grid_size) # kernel size in pixels
         # 1. Map points to a 2D BEV Grid
         def to_grid(pts):
             # Maps (x, y) to integer grid indices
@@ -109,7 +143,7 @@ def deocclude(pts_drivable, pts_nondrivable, grid_size=0.1, kernel_size=5):
         kernel = np.ones((kernel_size, kernel_size), np.uint8)
         filled_mask = cv2.morphologyEx(road_mask, cv2.MORPH_CLOSE, kernel)
 
-        # 4. Filter pts_nondrivable (Remove noise inside the filled road area)
+        # 4. Filter pts_nondrivable (remove noise inside the filled road area)
         nd_indices = to_grid(pts_nondrivable) # non-drivable points
         # Ensure indices are within bounds of the mask
         nd_indices[:, 0] = np.clip(nd_indices[:, 0], 0, width - 1)
@@ -124,7 +158,41 @@ def deocclude(pts_drivable, pts_nondrivable, grid_size=0.1, kernel_size=5):
         new_pts = (filled_pixels * grid_size) + min_coords
         clean_drivable = np.concatenate([pts_drivable, new_pts], axis=0)
 
+        # 6. sparsify 
+        clean_drivable = sparsify_points(clean_drivable, grid_size=cfg_bev.grid_size)
+        clean_nondrivable = sparsify_points(clean_nondrivable, grid_size=cfg_bev.grid_size)
+
         return clean_drivable, clean_nondrivable
+
+
+# def shadow_completion(pts, grid_size=0.1, kernel_size=7):
+#     """
+#         Morphological closing to complete empty shadows caused by occlusions
+#     """
+#     # 1. Map points to a 2D BEV Grid
+#     def to_grid(pts):
+#         # Maps (x, y) to integer grid indices
+#         return np.floor((pts - min_coords) / grid_size).astype(int)
+#     min_coords = pts.min(axis=0)
+#     indices = to_grid(pts) # drivable points
+    
+#     # 2. Create Binary Occupancy Map
+#     max_coords = pts.max(axis=0)
+#     width, height = (np.ceil((max_coords - min_coords) / grid_size).astype(int)) + 2
+#     road_mask = np.zeros((width, height), dtype=np.uint8)
+#     road_mask[indices[:, 0], indices[:, 1]] = 1
+    
+#     # 3. Morphological Closing (Fills the black gaps/wedges between scan lines)
+#     kernel = np.ones((kernel_size, kernel_size), np.uint8)
+#     filled_mask = cv2.morphologyEx(road_mask, cv2.MORPH_CLOSE, kernel)
+
+#     # 5. Synthesize 'filled' points => target empty pts
+#     filled_pixels = np.argwhere((filled_mask == 1) & (road_mask == 0))
+#     # Convert pixel indices back to world coordinates (x, y)
+#     new_pts = (filled_pixels * grid_size) + min_coords
+#     pts_complete = np.concatenate([pts, new_pts], axis=0)
+
+#     return pts_complete
     
 
 
@@ -461,19 +529,27 @@ def vectorize_drivable_boundaries(points, semantics):
     pts_drivable, pts_nondrivable = points[indexes_drivable], points[indexes_nondrivable]
     pts_drivable = pts_drivable[:,[0,2]] # X-axis and Z-axis
     pts_nondrivable = pts_nondrivable[:,[0,2]] # X-axis and Z-axis
-    
     # ===============================================
-    # (2) Fill occlusions
-    # ===============================================
-    pts_drivable, pts_nondrivable = deocclude(
-        pts_drivable, pts_nondrivable, grid_size=cfg_bev.grid_size,
-    )
-    
-    # ===============================================
-    # (3) Point Sparsification at dense areas for speed up
+    # (2) Point Sparsification at dense areas for speed up
     # ===============================================
     pts_drivable = sparsify_points(pts_drivable, grid_size=cfg_bev.grid_size)
     pts_nondrivable = sparsify_points(pts_nondrivable, grid_size=cfg_bev.grid_size)
+    # ===============================================
+    # (3) Fill occlusion shadows
+    # ===============================================
+    pts_drivable, pts_nondrivable = deocclude(
+        pts_drivable, pts_nondrivable, 
+        grid_size=cfg_bev.grid_size,
+        kernel_size=cfg_bev.mc_kernel,
+    )
+    # intermediate pts
+    if cfg_bev.debug:
+        print(colored('Debug Mode', 'green'))
+        save_drivable_pts(
+            np.insert(pts_drivable, 1, 0, axis=1), # insert 0 to axis Y (1)
+            np.insert(pts_nondrivable, 1, 0, axis=1), # insert 0 to axis Y (1)
+            filename='pts_intermediate.glb'
+        )
 
     # ===============================================
     # (3) Search candidate boundary points
