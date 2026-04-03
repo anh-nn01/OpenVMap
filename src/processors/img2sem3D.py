@@ -22,6 +22,7 @@ import cv2
 import time
 import uuid
 from termcolor import colored
+import copy
 
 # configs
 sys.path.append(f"{pwd}/../configs")
@@ -35,6 +36,15 @@ from generate_semantics import Semantic2DGenerator
 from generate_3Dpc import PointCloud3DGenerator
 # 2D info to 3D points
 from generate_bev_grid import img_reconstruct_3D_points, visualize_outputs
+# Vectorization
+from vectorize import vectorize_convex_crosswalk, vectorize_drivable_boundaries, visualize_map
+
+
+road_class_idx = cfg_bev.road_class_idx # 'drivable road area'
+lane_marking_class_idx = cfg_bev.lane_marking_class_idx
+crosswalk_class_idx = cfg_bev.crosswalk_class_idx
+
+road_class_name = 'road' # dict key name of 'drivable road area'
 
 
 # Initialize generators
@@ -45,7 +55,9 @@ generator_3d = PointCloud3DGenerator()
 """ TODO: list of img paths"""
 # img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_6/sample_nuscene_87.png'
 # img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_7/n008-2018-08-28-16-43-51-0400__CAM_FRONT__1535489311362404.jpg'
-img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_9/000000.jpg'
+# img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_9/000000.jpg'
+# img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_10/000040.jpg'
+img_path = '/fs/nexus-projects/open_vectormap/src/examples/nusc/img_10/000042.jpg'
 vis_path = f'{pwd}/debug_outputs/img2sem3d/' # None: no output
 
 img = Image.open(img_path)
@@ -116,7 +128,10 @@ for idx, semantic_class in enumerate(mask_dict):
     mask = mask_dict[semantic_class].astype(np.float32)[0]
     mask = cv2.resize(mask, (W_d, H_d), interpolation=cv2.INTER_LINEAR)
     mask_dict[semantic_class] = (mask >= cfg_bev.SEG_THRESHOLD).astype(np.float32)
-# 3D point reconstruction
+
+# -------------------------------------------------
+# (3a) Semantic 3D point reconstruction: multiple classes (each point per class)
+# -------------------------------------------------
 pc_grid, sem_grid, valid_indexes = img_reconstruct_3D_points(
     img, mask_dict, K, D,
     xlim=cfg_bev.xlim, zlim=cfg_bev.zlim, 
@@ -125,8 +140,27 @@ pc_grid, sem_grid, valid_indexes = img_reconstruct_3D_points(
 # extract points of interest
 points = pc_grid.reshape(-1,3)[valid_indexes]
 semantics = sem_grid.reshape(-1,1)[valid_indexes]
+
+# -------------------------------------------------
+# (3b) Semantic 3D point reconstruction: central on road class (no tie-breaking crosswalk/lane markers)
+#   Purpose: address semantic ambiguity for road polyline vectorization
+# -------------------------------------------------
+mask_dict_roadCentric = copy.deepcopy(mask_dict)
+for sem_class in mask_dict_roadCentric:
+    if sem_class != road_class_name:
+        mask_dict_roadCentric[sem_class] *= 0 # suppress all non-road classes
+pc_grid_roadCentric, sem_grid_roadCentric, valid_indexes_roadCentric = img_reconstruct_3D_points(
+    img, mask_dict_roadCentric, K, D,
+    xlim=cfg_bev.xlim, zlim=cfg_bev.zlim, 
+    # ylim (height) is determined automatically based on cfg_bev.BEV_HEIGHT
+)
+# extract points of interest
+points_roadCentric = pc_grid_roadCentric.reshape(-1,3)[valid_indexes_roadCentric]
+semantics_roadCentric = sem_grid_roadCentric.reshape(-1,1)[valid_indexes_roadCentric]
+
+
 end_total = time.time()
-print(colored(f'Total E2E: {end_total-start_total} s.', 'green'))
+print(colored(f'Total E2E reconstruction: {end_total-start_total} s.', 'green'))
 
 # visualization
 if vis_path is not None:
@@ -141,4 +175,28 @@ if vis_path is not None:
         num_classes, valid_indexes,
         vis_path,
     )
+
+
+# ============================================================
+# (4) Vectorization
+# ============================================================
+polylines_dict = {
+    'boundary': None,
+    'crosswalk': None,
+}
+
+start = time.time()
+polylines_dict['crosswalk'] = vectorize_convex_crosswalk(points, semantics)
+end = time.time()
+print(colored(f'Crosswalk vectorization: {round(end-start,3)} s.', 'green'))
+
+start = time.time()
+polylines_dict['boundary'] = vectorize_drivable_boundaries(
+    points_roadCentric, semantics_roadCentric
+)
+end = time.time()
+print(colored(f'Drivable vectorization: {round(end-start,3)} s.', 'green'))
+
+if vis_path is not None:
+    visualize_map(polylines_dict, vis_path)
 
